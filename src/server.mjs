@@ -7,7 +7,8 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { animatedSvg, framesOf, loadBytes } from "./gif.mjs";
+import { Worker } from "node:worker_threads";
+import { framesOf, loadBytes, stillSvg } from "./gif.mjs";
 import { searchGiphy } from "./giphy.mjs";
 import { GIF_RULES } from "./rules.mjs";
 
@@ -24,22 +25,45 @@ if (process.argv[2] === "setup") {
 
 const server = new McpServer({ name: "gifmate", version: "0.1.0" }, { instructions: GIF_RULES });
 
+// Animated SVGs are CPU work: a worker thread builds them, so the server keeps answering meanwhile
+// (on the main thread a search waited up to 2.6 s behind the previous search's previews).
+const worker = new Worker(new URL("./anim-worker.mjs", import.meta.url));
+const waiting = new Map();
+let jobs = 0;
+worker.on("message", ({ id, svg, error }) => {
+  const job = waiting.get(id);
+  waiting.delete(id);
+  if (error) job.reject(new Error(error));
+  else job.resolve(svg);
+});
+const animate = (bytes, options) =>
+  new Promise((resolve, reject) => {
+    const id = ++jobs;
+    waiting.set(id, { resolve, reject });
+    worker.postMessage({ id, bytes: new Uint8Array(bytes), options });
+  });
+
 // Keep the GIF and an SMIL SVG that plays it (chat panels animate SVG, not a GIF inside one).
-async function saveGif(bytes, budget, maxSide) {
+async function saveGif(bytes) {
   framesOf(bytes, { maxFrames: 2 }); // refuse anything that is not a GIF
   const dir = join(tmpdir(), "gifmate");
   await mkdir(dir, { recursive: true });
-  const name = createHash("sha1").update(bytes).digest("hex").slice(0, 12) + (budget ? `-${budget}` : "");
+  const name = createHash("sha1").update(bytes).digest("hex").slice(0, 12);
   const file = join(dir, name + ".gif");
   await writeFile(file, bytes);
   try {
     const svgFile = join(dir, name + ".svg");
-    await writeFile(svgFile, animatedSvg(bytes, budget ? { budget, maxSide } : undefined).svg);
+    await writeFile(svgFile, await animate(bytes));
     return { file, svgFile };
   } catch {
     return { file }; // too big to play inline
   }
 }
+
+// Previews one at a time; a new search drops the previous one's previews still waiting: nobody looks at them any more.
+let queue = Promise.resolve();
+let searches = 0;
+const later = (job, search) => (queue = queue.then(() => (search === searches ? job() : undefined)).catch(() => {}));
 
 const fail = (err) => ({ isError: true, content: [{ type: "text", text: String(err.message || err) }] });
 
@@ -84,15 +108,20 @@ server.registerTool(
     try {
       const results = await searchGiphy(query, { limit });
       if (thumbs) {
-        await Promise.all(
-          results.map(async (r) => {
-            try {
-              r.thumb = (await saveGif(await loadBytes(r.small), 40_000, 120)).svgFile;
-            } catch {
-              // no preview for this one
-            }
-          }),
-        );
+        // Answer at once, as fast pickers do: GIPHY's CDN takes 0.1-1.2 s per image (measured), the search 0.2 s.
+        // The files appear when ready: GIPHY's still frame (`thumb`), then the animated preview (`anim`).
+        const dir = join(tmpdir(), "gifmate");
+        await mkdir(dir, { recursive: true });
+        const search = ++searches;
+        for (const r of results) {
+          const id = createHash("sha1").update(r.small).digest("hex").slice(0, 12);
+          r.thumb = join(dir, `${id}-still.svg`);
+          r.anim = join(dir, `${id}-anim.svg`);
+          if (r.still) void loadBytes(r.still).then((bytes) => writeFile(r.thumb, stillSvg(bytes))).catch(() => {});
+          void loadBytes(r.small)
+            .then((bytes) => later(async () => writeFile(r.anim, await animate(bytes, { budget: 40_000, maxSide: 120 })), search))
+            .catch(() => {});
+        }
       }
       const text = results.length
         ? JSON.stringify(results, null, 2) + "\n\nPowered by GIPHY"

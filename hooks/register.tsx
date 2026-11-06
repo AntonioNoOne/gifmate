@@ -52,9 +52,11 @@ async function svgOf($: any, path: string | undefined): Promise<string> {
 }
 
 // One search, shared by `/gif <what>` and the tray's own search box.
+let lastSearch = 0
 async function search($: any, query: string) {
   let status = query ? `Cerco “${query}”…` : 'Scrivi qui sotto cosa cercare (in inglese funziona meglio) e premi Invio'
   let picks: GifmatePick[] = []
+  const seq = ++lastSearch
   // keep the current row while searching: emptying it made the GIFs blink at every pause in typing
   await update($, picker, v => ({ ...v, isOpen: true, status }))
   if (!query) return
@@ -72,7 +74,14 @@ async function search($: any, query: string) {
       status = `Ricerca non riuscita: ${String(err)}`
     }
   }
+  // a slower, older search must not overwrite the newer one
+  if (seq !== lastSearch) return
   await update($, picker, v => ({ ...v, isOpen: true, status, picks }))
+  // the animated previews land a moment after the stills: redraw a few times to pick them up
+  for (let i = 0; i < 8 && picks.length && seq === lastSearch; i++) {
+    await $.clock.sleep(300)
+    await update($, picker, v => ({ ...v }))
+  }
 }
 
 // Search while typing: wait until the person pauses, so a free GIPHY key (100 searches an hour) lasts.
@@ -181,10 +190,17 @@ export const register: Register = on => {
     }
     const cards = await Promise.all(
       picks.map(async (p, i) => {
-        const thumb = Svg ? await svgOf($, p.thumb) : ''
+        // the animated preview once the server has it, GIPHY's still frame until then
+        const thumb = Svg ? (await svgOf($, p.anim)) || (await svgOf($, p.thumb)) : ''
         return (
           <Box flexDirection="column" alignItems="center">
-            {thumb ? sizedGif(Svg, thumb, THUMB, p.title) : <Text>{p.title}</Text>}
+            {thumb ? (
+              sizedGif(Svg, thumb, THUMB, p.title)
+            ) : (
+              <Box width={THUMB} height={THUMB} borderStyle="round" justifyContent="center" alignItems="center">
+                <Text dimColor>…</Text>
+              </Box>
+            )}
             <Box flexDirection="row" gap={1}>
               <Button key={`send-${i}`} label="➤ Invia" plain onPress={() => pick(p, true)} />
               <Button key={`attach-${i}`} label="📎 Allega" plain dimColor onPress={() => pick(p, false)} />

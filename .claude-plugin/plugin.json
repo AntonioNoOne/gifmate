@@ -7,7 +7,7 @@
     "gifmate": {
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/dist/gifmate.mjs"
+        "${CLAUDE_PLUGIN_ROOT}/dist/server.mjs"
       ]
     }
   },

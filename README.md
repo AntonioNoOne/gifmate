@@ -39,11 +39,11 @@ which needs no `npm install`:
 
 ```sh
 git clone https://github.com/AntonioNoOne/gifmate
-codex mcp add gifmate -- node /path/to/gifmate/dist/gifmate.mjs
+codex mcp add gifmate -- node /path/to/gifmate/dist/server.mjs
 ```
 
 ```json
-{ "mcpServers": { "gifmate": { "command": "node", "args": ["/path/to/gifmate/dist/gifmate.mjs"] } } }
+{ "mcpServers": { "gifmate": { "command": "node", "args": ["/path/to/gifmate/dist/server.mjs"] } } }
 ```
 
 Codex asks before each MCP tool call; to let gifmate run without asking, add
@@ -52,7 +52,7 @@ Codex asks before each MCP tool call; to let gifmate run without asking, add
 **GIPHY key**: run once
 
 ```sh
-node /path/to/gifmate/dist/gifmate.mjs setup
+node /path/to/gifmate/dist/server.mjs setup
 ```
 
 It saves the key in your user config (`%APPDATA%\gifmate\config.json` on Windows,
@@ -88,7 +88,7 @@ Search results are powered by GIPHY.
 ```sh
 npm install
 npm test
-npm run build   # refreshes dist/gifmate.mjs, the single-file server the plugin runs
+npm run build   # refreshes dist/server.mjs, the bundled server (and its preview worker) the plugin runs
 ```
 
 MIT license.

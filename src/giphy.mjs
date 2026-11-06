@@ -19,6 +19,7 @@ export async function searchGiphy(query, { limit = 6, rating = "pg" } = {}) {
       page: g.url,
       gif,
       small: g.images.fixed_height_small?.url || gif,
+      still: g.images.fixed_height_small_still?.url,
     };
   });
 }

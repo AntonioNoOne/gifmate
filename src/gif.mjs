@@ -11,19 +11,29 @@ const MAX_PIXELS = 4096 * 4096;
 // A URL in a prompt may come from anyone: never let it reach this machine or its network.
 const PRIVATE = [/^127\./, /^10\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./, /^0\./, /^::1$/, /^f[cd]/i, /^fe80/i, /^::ffff:(127|10|192\.168)\./i];
 
+// GIPHY serves from a few hosts: one DNS lookup a minute each, not one per preview.
+const resolved = new Map();
+async function addressesOf(host) {
+  const hit = resolved.get(host);
+  if (hit && Date.now() - hit.at < 60_000) return hit.addresses;
+  const addresses = (await lookup(host, { all: true })).map((a) => a.address);
+  resolved.set(host, { at: Date.now(), addresses });
+  return addresses;
+}
+
 async function assertPublic(url) {
   const host = url.hostname.replace(/^\[|\]$/g, "");
-  const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
+  const addresses = isIP(host) ? [host] : await addressesOf(host);
   if (host === "localhost" || addresses.some((a) => PRIVATE.some((re) => re.test(a)))) {
     throw new Error(`refused: ${url.hostname} is a local or private address`);
   }
 }
 
-async function download(source) {
+async function download(source, timeoutMs) {
   let url = new URL(source);
   for (let hop = 0; hop < 4; hop++) {
     await assertPublic(url);
-    const res = await fetch(url, { headers: { "user-agent": "gifmate" }, redirect: "manual", signal: AbortSignal.timeout(15_000) });
+    const res = await fetch(url, { headers: { "user-agent": "gifmate" }, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
       url = new URL(res.headers.get("location"), url); // each redirect is checked too
       continue;
@@ -42,8 +52,8 @@ async function download(source) {
   throw new Error("download failed: too many redirects");
 }
 
-export async function loadBytes(source) {
-  if (/^https?:\/\//i.test(source)) return download(source);
+export async function loadBytes(source, { timeoutMs = 15_000 } = {}) {
+  if (/^https?:\/\//i.test(source)) return download(source, timeoutMs);
   if ((await stat(source)).size > MAX_BYTES) throw new Error("GIF larger than 20 MB");
   return readFile(source);
 }
@@ -57,7 +67,7 @@ function* composite(reader) {
     const info = reader.frameInfo(i);
     const before = info.disposal === 3 ? canvas.slice() : null;
     reader.decodeAndBlitFrameRGBA(i, canvas);
-    yield { index: i, time: t, rgba: canvas.slice() };
+    yield { index: i, time: t, rgba: canvas }; // the live canvas: copy it only if you keep it
     t += (info.delay || 10) / 100; // delay is in hundredths of a second
     if (info.disposal === 2) {
       for (let y = info.y; y < info.y + info.height; y++) {
@@ -179,6 +189,13 @@ export function animatedSvg(bytes, { budget = 120_000, maxSide = 320 } = {}) {
   throw new Error("GIF too large to animate inline");
 }
 
+// A still GIF wrapped in an SVG: chat panels draw it at once, no decoding needed.
+export function stillSvg(bytes) {
+  const { width, height } = new GifReader(new Uint8Array(bytes));
+  const href = `data:image/gif;base64,${Buffer.from(bytes).toString("base64")}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><image width="${width}" height="${height}" href="${href}"/></svg>`;
+}
+
 // Decode once, composite in order, keep only `maxFrames` frames evenly spaced in time.
 function keyFrames(bytes, maxFrames) {
   const reader = new GifReader(new Uint8Array(bytes));
@@ -192,7 +209,7 @@ function keyFrames(bytes, maxFrames) {
   }
   const keep = new Set(pickIndexes(times, maxFrames));
   const frames = [];
-  for (const f of composite(reader)) if (keep.has(f.index)) frames.push(f);
+  for (const f of composite(reader)) if (keep.has(f.index)) frames.push({ ...f, rgba: f.rgba.slice() });
   return { width: reader.width, height: reader.height, totalFrames: n, duration: t, frames };
 }
 

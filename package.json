@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "build": "esbuild src/server.mjs --bundle --minify --platform=node --format=esm --target=node18 --outfile=dist/gifmate.mjs --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\""
+    "build": "esbuild src/server.mjs src/anim-worker.mjs --bundle --minify --platform=node --format=esm --target=node18 --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\""
   },
   "engines": {
     "node": ">=18"
