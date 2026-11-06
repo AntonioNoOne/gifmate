@@ -148,12 +148,12 @@ export function toGif(rgba, width, height, maxSide) {
 // An SVG that plays the GIF with SMIL, for chat panels that draw SVG as an image
 // (an <img> does not animate a GIF nested inside an SVG). Fewer and smaller frames
 // until it fits `budget` characters. The GIF is decoded once; the tries only re-encode.
-export function animatedSvg(bytes, { budget = 120_000 } = {}) {
+export function animatedSvg(bytes, { budget = 120_000, maxSide = 320 } = {}) {
   const gif = keyFrames(bytes, 24);
   const dur = gif.duration || 1;
   // sharpness first: the biggest side that still fits at least 8 frames
   const tries = [];
-  for (const side of [320, 280, 240, 200, 180, 160, 140, 120]) for (const count of [24, 16, 12, 8]) tries.push([count, side]);
+  for (const side of [320, 280, 240, 200, 180, 160, 140, 120].filter((x) => x <= maxSide)) for (const count of [24, 16, 12, 8]) tries.push([count, side]);
   tries.push([6, 120], [4, 100], [2, 100], [4, 80], [2, 64]);
   for (const [count, side] of tries) {
     const frames = pickIndexes(gif.frames.map((f) => f.time), count).map((i) => gif.frames[i]);

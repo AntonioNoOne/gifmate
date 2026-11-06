@@ -25,7 +25,7 @@ if (process.argv[2] === "setup") {
 const server = new McpServer({ name: "gifmate", version: "0.1.0" }, { instructions: GIF_RULES });
 
 // Keep the GIF and an SMIL SVG that plays it (chat panels animate SVG, not a GIF inside one).
-async function saveGif(bytes, budget) {
+async function saveGif(bytes, budget, maxSide) {
   framesOf(bytes, { maxFrames: 2 }); // refuse anything that is not a GIF
   const dir = join(tmpdir(), "gifmate");
   await mkdir(dir, { recursive: true });
@@ -34,7 +34,7 @@ async function saveGif(bytes, budget) {
   await writeFile(file, bytes);
   try {
     const svgFile = join(dir, name + ".svg");
-    await writeFile(svgFile, animatedSvg(bytes, budget ? { budget } : undefined).svg);
+    await writeFile(svgFile, animatedSvg(bytes, budget ? { budget, maxSide } : undefined).svg);
     return { file, svgFile };
   } catch {
     return { file }; // too big to play inline
@@ -87,7 +87,7 @@ server.registerTool(
         await Promise.all(
           results.map(async (r) => {
             try {
-              r.thumb = (await saveGif(await loadBytes(r.small), 40_000)).svgFile;
+              r.thumb = (await saveGif(await loadBytes(r.small), 40_000, 120)).svgFile;
             } catch {
               // no preview for this one
             }

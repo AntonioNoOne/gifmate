@@ -72,7 +72,7 @@ let typed = ''
 async function searchWhileTyping($: any, value: string) {
   typed = value.trim()
   const mine = typed
-  await $.clock.sleep(700)
+  await $.clock.sleep(450)
   if (mine === typed && mine.length >= 2) await search($, mine)
 }
 
