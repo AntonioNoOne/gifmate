@@ -4,6 +4,14 @@ import type { Register } from 'claude-code'
 import type { GifmateAttached, GifmatePick, GifmatePicker } from '../types'
 
 const SHOW_HEIGHT = 180
+
+// A GIF's SVG at its own proportions, never scaled up (blurry), at most `maxHeight` tall.
+function sizedGif(Svg: any, svg: string, maxHeight = SHOW_HEIGHT, alt = 'GIF') {
+  const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(svg)
+  const [w, h] = size ? [Number(size[1]), Number(size[2])] : [maxHeight, maxHeight]
+  const k = Math.min(1, maxHeight / h)
+  return <Svg source={svg} alt={alt} width={Math.round(w * k)} height={Math.round(h * k)} />
+}
 const SENT = /gifmate-sent: (.+?\.gif)/i
 const SVG = /gifmate-svg: (.+?\.svg)/i
 const GIF_REF = /(?:https?:\/\/\S+?\.gif|(?:[A-Za-z]:)?[^\s"'<>|]*\.gif)(?=[\s"'),.]|$)/gi
@@ -103,11 +111,7 @@ export const register: Register = on => {
       )
     }
     const { Svg } = $.ui.resolve(e) as { Svg: any }
-    // never scaled up (blurry), and no taller than a chat line of thumbnails
-    const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(svg)
-    const [w, ht] = size ? [Number(size[1]), Number(size[2])] : [SHOW_HEIGHT, SHOW_HEIGHT]
-    const shown = Math.min(1, SHOW_HEIGHT / ht)
-    const gifOnly = <Svg source={svg} alt="GIF" width={Math.round(w * shown)} height={Math.round(ht * shown)} />
+    const gifOnly = sizedGif(Svg, svg)
     // like a teammate's message: just the GIF; the full transcript (ctrl+o) keeps the tool row
     if (!e.props.isExpanded) return gifOnly
     return (
@@ -130,12 +134,9 @@ export const register: Register = on => {
     const svg = e.surface === 'terminal' || !/\.gif$/i.test(source) ? '' : await svgOf($, source.replace(/\.gif$/i, '.svg'))
     if (!svg) return line
     const { Svg } = $.ui.resolve(e) as { Svg: any }
-    const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(svg)
-    const [w, ht] = size ? [Number(size[1]), Number(size[2])] : [SHOW_HEIGHT, SHOW_HEIGHT]
-    const shown = Math.min(1, SHOW_HEIGHT / ht)
     return (
       <Box flexDirection="column">
-        <Svg source={svg} alt="GIF" width={Math.round(w * shown)} height={Math.round(ht * shown)} />
+        {sizedGif(Svg, svg)}
         {line}
       </Box>
     )
@@ -181,11 +182,9 @@ export const register: Register = on => {
     const cards = await Promise.all(
       picks.map(async (p, i) => {
         const thumb = Svg ? await svgOf($, p.thumb) : ''
-        const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(thumb)
-        const w = size ? Math.round((Number(size[1]) * THUMB) / Number(size[2])) : THUMB
         return (
           <Box flexDirection="column" alignItems="center">
-            {thumb ? <Svg source={thumb} alt={p.title} width={w} height={THUMB} /> : <Text>{p.title}</Text>}
+            {thumb ? sizedGif(Svg, thumb, THUMB, p.title) : <Text>{p.title}</Text>}
             <Box flexDirection="row" gap={1}>
               <Button key={`send-${i}`} label="➤ Invia" plain onPress={() => pick(p, true)} />
               <Button key={`attach-${i}`} label="📎 Allega" plain dimColor onPress={() => pick(p, false)} />
@@ -208,21 +207,18 @@ export const register: Register = on => {
     )
   })
 
-  // A GIF you sent from the picker: show it in your message, not its file path.
+  // A GIF you sent from the tray: your words, then the GIF; not its title and file path.
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
-    const row = await next(e)
-    const file = /\S*gifmate[\\/][0-9a-f]{12}\.gif/i.exec(e.props.text)?.[0]
-    if (!file || e.surface === 'terminal') return row
+    const m = /^([\s\S]*?)\n?GIF: .*\n(\S*gifmate[\\/][0-9a-f]{12}\.gif)\s*$/i.exec(e.props.text)
+    const svg = m && e.surface !== 'terminal' ? await svgOf($, m[2].replace(/\.gif$/i, '.svg')) : ''
+    if (!m || !svg) return next(e)
     const { Box } = $.ui.resolve(e)
-    const svg = await svgOf($, file.replace(/\.gif$/i, '.svg'))
-    if (!svg) return row
     const { Svg } = $.ui.resolve(e) as { Svg: any }
-    const gif = <Svg source={svg} alt="GIF" width={SHOW_HEIGHT} height={SHOW_HEIGHT} />
-    if (!e.props.isExpanded) return gif
+    const words = m[1].trim()
     return (
       <Box flexDirection="column">
-        {row}
-        {gif}
+        {words ? await next({ ...e, props: { ...e.props, text: words } }) : null}
+        {sizedGif(Svg, svg)}
       </Box>
     )
   })
