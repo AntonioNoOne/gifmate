@@ -44,6 +44,8 @@ async function svgOf($: any, path: string | undefined): Promise<string> {
   if (svgCache.has(path)) return svgCache.get(path) as string
   try {
     const svg: string = await $.fs.read(path)
+    // a file still being written would draw broken (an empty preview): treat it as not there yet
+    if (!svg.trimEnd().endsWith('</svg>')) return ''
     svgCache.set(path, svg)
     return svg
   } catch {

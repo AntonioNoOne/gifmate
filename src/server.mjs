@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
@@ -58,6 +58,12 @@ async function saveGif(bytes) {
   } catch {
     return { file }; // too big to play inline
   }
+}
+
+// Write to a side name, then rename: the chat never reads a half-written preview.
+async function writeWhole(file, text) {
+  await writeFile(`${file}.part`, text);
+  await rename(`${file}.part`, file);
 }
 
 // Previews one at a time; a new search drops the previous one's previews still waiting: nobody looks at them any more.
@@ -117,9 +123,9 @@ server.registerTool(
           const id = createHash("sha1").update(r.small).digest("hex").slice(0, 12);
           r.thumb = join(dir, `${id}-still.svg`);
           r.anim = join(dir, `${id}-anim.svg`);
-          if (r.still) void loadBytes(r.still).then((bytes) => writeFile(r.thumb, stillSvg(bytes))).catch(() => {});
+          if (r.still) void loadBytes(r.still).then((bytes) => writeWhole(r.thumb, stillSvg(bytes))).catch(() => {});
           void loadBytes(r.small)
-            .then((bytes) => later(async () => writeFile(r.anim, await animate(bytes, { budget: 40_000, maxSide: 120 })), search))
+            .then((bytes) => later(async () => writeWhole(r.anim, await animate(bytes, { budget: 40_000, maxSide: 120 })), search))
             .catch(() => {});
         }
       }
