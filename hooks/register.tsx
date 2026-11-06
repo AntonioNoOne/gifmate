@@ -87,8 +87,19 @@ export const register: Register = on => {
   })
 
   // You -> me, the easy way: /gif <what> opens a GIPHY picker beside the chat.
-  on('session.start', async ($, e, next) => {
+  // Registered at start, and again on the first prompt after a /reload-plugins (which skips session.start).
+  let hasCommand = false
+  const registerCommand = async ($: any) => {
+    if (hasCommand) return
+    hasCommand = true
     await $.command.register({ name: 'gif', description: 'Search GIPHY and send a GIF in the chat' })
+  }
+  on('session.start', async ($, e, next) => {
+    await registerCommand($)
+    return next(e)
+  })
+  on('prompt.submit', async ($, e, next) => {
+    await registerCommand($)
     return next(e)
   })
 
