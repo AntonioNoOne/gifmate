@@ -77,6 +77,15 @@ export const register: Register = on => {
     )
   })
 
+  // gif_view: one quiet line instead of a box of frames; ctrl+o still shows them all.
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    if (!/gif_view$/.test(e.props.tool) || e.props.isRunning || e.props.isErrored || e.props.isExpanded) return next(e)
+    const text = typeof e.props.output === 'string' ? e.props.output : JSON.stringify(e.props.output ?? '')
+    const m = /(\d+) frames, ([\d.]+) s/.exec(text)
+    const { Text } = $.ui.resolve(e)
+    return <Text dimColor>👀 GIF guardata{m ? ` · ${m[1]} fotogrammi · ${Number(m[2]).toFixed(1)} s` : ''}</Text>
+  })
+
   // You -> me, the easy way: /gif <what> opens a GIPHY picker beside the chat.
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'gif', description: 'Search GIPHY and send a GIF in the chat' })
