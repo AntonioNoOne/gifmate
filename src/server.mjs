@@ -86,7 +86,7 @@ server.registerTool(
         await Promise.all(
           results.map(async (r) => {
             try {
-              r.thumb = (await saveGif(await loadBytes(r.small), 25_000)).svgFile;
+              r.thumb = (await saveGif(await loadBytes(r.small), 40_000)).svgFile;
             } catch {
               // no preview for this one
             }

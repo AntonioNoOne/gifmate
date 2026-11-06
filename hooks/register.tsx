@@ -92,30 +92,31 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'gif' }, async ($, e) => {
-    const query = e.args.trim()
-    let status = query ? `Cerco “${query}”…` : 'Scrivi cosa cercare, in inglese: /gif cat applause'
+  // One search, shared by `/gif <what>` and the tray's own search box.
+  async function search($: any, query: string) {
+    let status = query ? `Cerco “${query}”…` : 'Scrivi qui sotto cosa cercare (in inglese funziona meglio) e premi Invio'
     let picks: GifmatePick[] = []
     await update($, picker, () => ({ isOpen: true, status, picks }))
-    if (!query) return {}
-    const search = await toolNamed($, '__gif_search')
-    if (!search) {
+    if (!query) return
+    const tool = await toolNamed($, '__gif_search')
+    if (!tool) {
       status = 'gifmate non è collegato in questa sessione.'
     } else {
       try {
-        const { text } = await $.tool.call({ tool: search, query, limit: 6, thumbs: true } as any)
+        const { text } = await $.tool.call({ tool, query, limit: 6, thumbs: true })
         const body = String(text)
         // results come as JSON; anything else is the server's own message (no results, no key)
         picks = body.trimStart().startsWith('[') ? JSON.parse(body.split('\n\nPowered')[0]) : []
-        status = picks.length
-          ? 'Powered by GIPHY'
-          : `Nessuna GIF per “${query}”. GIPHY capisce meglio l'inglese: prova /gif cat applause`
+        status = picks.length ? 'Powered by GIPHY' : `Nessuna GIF per “${query}”. In inglese GIPHY trova di più: prova “cat”`
       } catch (err) {
         status = `Ricerca non riuscita: ${String(err)}`
-        $.ui.toast(status)
       }
     }
     await update($, picker, () => ({ isOpen: true, status, picks }))
+  }
+
+  on('command.run', { command: 'gif' }, async ($, e) => {
+    await search($, e.args.trim())
     return {}
   })
 
@@ -123,7 +124,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const { isOpen, status, picks } = await read($, picker)
     if (!isOpen) return next(e)
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Box, Text, Button, Input } = $.ui.resolve(e)
     const close = () => update($, picker, () => CLOSED)
     const { Svg } = $.ui.resolve(e) as { Svg?: any }
     const send = async (p: GifmatePick) => {
@@ -150,9 +151,10 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" gap={1}>
-          <Text dimColor>{status}</Text>
+          <Input key="gif-query" placeholder="Cerca una GIF…" submitLabel="Cerca" autoFocus onSubmit={(q: string) => search($, q.trim())} />
           <Button key="gif-close" label="Chiudi" onPress={close} />
         </Box>
+        <Text dimColor>{status}</Text>
         <Box flexDirection="row" gap={1}>
           {cards}
         </Box>

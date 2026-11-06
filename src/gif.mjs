@@ -120,7 +120,7 @@ export function animatedSvg(bytes, { budget = 120_000 } = {}) {
   // sharpness first: the biggest side that still fits at least 8 frames
   const tries = [];
   for (const side of [320, 280, 240, 200, 180, 160, 140, 120]) for (const count of [24, 16, 12, 8]) tries.push([count, side]);
-  tries.push([6, 120], [4, 100], [2, 100]);
+  tries.push([6, 120], [4, 100], [2, 100], [4, 80], [2, 64]);
   for (const [count, side] of tries) {
     const gif = framesOf(bytes, { maxFrames: count, maxSide: side, encode: toGif });
     const scale = Math.min(1, side / Math.max(gif.width, gif.height));
