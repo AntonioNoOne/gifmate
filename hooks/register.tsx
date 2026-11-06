@@ -105,8 +105,22 @@ export const register: Register = on => {
     if (!/gif_view$/.test(e.props.tool) || e.props.isRunning || e.props.isErrored || e.props.isExpanded) return next(e)
     const text = typeof e.props.output === 'string' ? e.props.output : JSON.stringify(e.props.output ?? '')
     const m = /(\d+) frames, ([\d.]+) s/.exec(text)
-    const { Text } = $.ui.resolve(e)
-    return <Text dimColor>👀 GIF guardata{m ? ` · ${m[1]} fotogrammi · ${Number(m[2]).toFixed(1)} s` : ''}</Text>
+    const { Box, Text } = $.ui.resolve(e)
+    const line = <Text dimColor>👀 GIF guardata{m ? ` · ${m[1]} fotogrammi · ${Number(m[2]).toFixed(1)} s` : ''}</Text>
+    // a GIF sent from the tray has its animation next to it: show what was watched
+    const source = String((e.props.input as { source?: string })?.source ?? '')
+    const svg = e.surface === 'terminal' || !/\.gif$/i.test(source) ? '' : await svgOf($, source.replace(/\.gif$/i, '.svg'))
+    if (!svg) return line
+    const { Svg } = $.ui.resolve(e) as { Svg: any }
+    const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(svg)
+    const [w, ht] = size ? [Number(size[1]), Number(size[2])] : [SHOW_HEIGHT, SHOW_HEIGHT]
+    const shown = Math.min(1, SHOW_HEIGHT / ht)
+    return (
+      <Box flexDirection="column">
+        <Svg source={svg} alt="GIF" width={Math.round(w * shown)} height={Math.round(ht * shown)} />
+        {line}
+      </Box>
+    )
   })
 
   // You -> me, the easy way: /gif <what> opens a GIPHY picker beside the chat.
