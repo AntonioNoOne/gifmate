@@ -10,7 +10,35 @@ import { join } from "node:path";
 import { animatedSvg, framesOf, loadBytes } from "./gif.mjs";
 import { searchGiphy } from "./giphy.mjs";
 
+if (process.argv[2] === "setup") {
+  const { createInterface } = await import("node:readline/promises");
+  const { saveGiphyKey } = await import("./config.mjs");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const key = (await rl.question("GIPHY API key (free at https://developers.giphy.com): ")).trim();
+  rl.close();
+  if (!key) process.exit(1);
+  console.log(`Saved to ${await saveGiphyKey(key)}. Restart or reconnect gifmate in your agent.`);
+  process.exit(0);
+}
+
 const server = new McpServer({ name: "gifmate", version: "0.1.0" });
+
+// Keep the GIF and an SMIL SVG that plays it (chat panels animate SVG, not a GIF inside one).
+async function saveGif(bytes, budget) {
+  framesOf(bytes, { maxFrames: 2 }); // refuse anything that is not a GIF
+  const dir = join(tmpdir(), "gifmate");
+  await mkdir(dir, { recursive: true });
+  const name = createHash("sha1").update(bytes).digest("hex").slice(0, 12) + (budget ? `-${budget}` : "");
+  const file = join(dir, name + ".gif");
+  await writeFile(file, bytes);
+  try {
+    const svgFile = join(dir, name + ".svg");
+    await writeFile(svgFile, animatedSvg(bytes, budget ? { budget } : undefined).svg);
+    return { file, svgFile };
+  } catch {
+    return { file }; // too big to play inline
+  }
+}
 
 const fail = (err) => ({ isError: true, content: [{ type: "text", text: String(err.message || err) }] });
 
@@ -48,11 +76,23 @@ server.registerTool(
     inputSchema: {
       query: z.string().describe("What the GIF should show, in English works best"),
       limit: z.number().int().min(1).max(12).default(6),
+      thumbs: z.boolean().default(false).describe("Also save a small animated preview (SVG) of each result, for a picker UI"),
     },
   },
-  async ({ query, limit }) => {
+  async ({ query, limit, thumbs }) => {
     try {
       const results = await searchGiphy(query, { limit });
+      if (thumbs) {
+        await Promise.all(
+          results.map(async (r) => {
+            try {
+              r.thumb = (await saveGif(await loadBytes(r.small), 25_000)).svgFile;
+            } catch {
+              // no preview for this one
+            }
+          }),
+        );
+      }
       const text = results.length
         ? JSON.stringify(results, null, 2) + "\n\nPowered by GIPHY"
         : `No GIF found for "${query}".`;
@@ -75,20 +115,9 @@ server.registerTool(
   },
   async ({ source, caption }) => {
     try {
-      const bytes = await loadBytes(source);
-      framesOf(bytes, { maxFrames: 2 }); // refuse anything that is not a GIF
-      const dir = join(tmpdir(), "gifmate");
-      await mkdir(dir, { recursive: true });
-      const file = join(dir, createHash("sha1").update(bytes).digest("hex").slice(0, 12) + ".gif");
-      await writeFile(file, bytes);
+      const { file, svgFile } = await saveGif(await loadBytes(source));
       const lines = [`gifmate-sent: ${file}`];
-      try {
-        const svgFile = file.replace(/\.gif$/, ".svg");
-        await writeFile(svgFile, animatedSvg(bytes).svg);
-        lines.push(`gifmate-svg: ${svgFile}`);
-      } catch {
-        // too big to play inline: the chat mod shows the file path instead
-      }
+      if (svgFile) lines.push(`gifmate-svg: ${svgFile}`);
       if (caption) lines.push(caption);
       return { content: [{ type: "text", text: lines.join("\n") }] };
     } catch (err) {

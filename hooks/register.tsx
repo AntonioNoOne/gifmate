@@ -11,6 +11,30 @@ function pathFrom(output: unknown, re: RegExp): string | undefined {
   return re.exec(text)?.[1]?.replace(/\\\\/g, '\\')
 }
 
+const PANE = 'gifmate-picker'
+const THUMB = 96
+
+type Pick = { title: string; gif: string; thumb?: string }
+// The picker lives for one search; a reload simply closes it.
+let query = ''
+let status = ''
+let picks: Pick[] = []
+
+// The gifmate tools by suffix: the prefix depends on how gifmate was installed.
+async function toolNamed($: any, suffix: string): Promise<string | undefined> {
+  const tools: { name: string }[] = await $.tool.list()
+  return tools.find(t => /gifmate/i.test(t.name) && t.name.endsWith(suffix))?.name
+}
+
+async function svgOf($: any, path: string | undefined): Promise<string> {
+  if (!path) return ''
+  try {
+    return await $.fs.read(path)
+  } catch {
+    return ''
+  }
+}
+
 export const register: Register = on => {
   // Me -> you: play the GIF gif_send prepared (an SMIL SVG), under its tool row.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
@@ -49,6 +73,86 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {row}
         {gifOnly}
+      </Box>
+    )
+  })
+
+  // You -> me, the easy way: /gif <what> opens a GIPHY picker beside the chat.
+  on('session.start', async ($, e, next) => {
+    await $.command.register({ name: 'gif', description: 'Search GIPHY and send a GIF in the chat' })
+    return next(e)
+  })
+
+  on('command.run', { command: 'gif' }, async ($, e) => {
+    query = e.args.trim()
+    picks = []
+    status = query ? `Cerco “${query}”…` : 'Scrivi cosa cercare: /gif gatto che applaude'
+    await $.ui.open({ id: PANE, title: 'GIF' })
+    if (!query) return {}
+    const search = await toolNamed($, '__gif_search')
+    if (!search) {
+      status = 'gifmate non è collegato in questa sessione.'
+    } else {
+      try {
+        const { text } = await $.tool.call({ tool: search, query, limit: 6, thumbs: true } as any)
+        picks = JSON.parse(String(text).split('\n\nPowered')[0])
+        status = picks.length ? 'Powered by GIPHY' : `Nessuna GIF per “${query}”.`
+      } catch (err) {
+        status = `Ricerca non riuscita: ${String(err)}`
+      }
+    }
+    $.ui.invalidate('ui.render')
+    return {}
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Svg } = $.ui.resolve(e) as { Svg?: any }
+    const send = async (p: Pick) => {
+      status = 'Invio…'
+      $.ui.invalidate('ui.render')
+      const sendTool = await toolNamed($, '__gif_send')
+      const { text } = sendTool ? await $.tool.call({ tool: sendTool, source: p.gif } as any) : { text: '' }
+      const file = pathFrom(text, SENT)
+      await $.ui.close({ id: PANE })
+      if (file) await $.prompt.submit({ text: `GIF: ${p.title}\n${file}`, asUser: true })
+    }
+    const cards = await Promise.all(
+      picks.map(async (p, i) => {
+        const thumb = Svg ? await svgOf($, p.thumb) : ''
+        return (
+          <Box flexDirection="column" width={THUMB + 8}>
+            {thumb ? <Svg source={thumb} alt={p.title} width={THUMB} height={THUMB} /> : <Text>{p.title}</Text>}
+            <Button key={`send-${i}`} label="Manda" onPress={() => send(p)} />
+          </Box>
+        )
+      }),
+    )
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text dimColor>{status}</Text>
+        <Box flexDirection="row" flexWrap="wrap" gap={1}>
+          {cards}
+        </Box>
+      </Box>
+    )
+  })
+
+  // A GIF you sent from the picker: show it in your message, not its file path.
+  on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
+    const row = await next(e)
+    const file = /\S*gifmate[\\/][0-9a-f]{12}\.gif/i.exec(e.props.text)?.[0]
+    if (!file || e.surface === 'terminal') return row
+    const { Box } = $.ui.resolve(e)
+    const svg = await svgOf($, file.replace(/\.gif$/i, '.svg'))
+    if (!svg) return row
+    const { Svg } = $.ui.resolve(e) as { Svg: any }
+    const gif = <Svg source={svg} alt="GIF" width={SHOW_HEIGHT} height={SHOW_HEIGHT} />
+    if (!e.props.isExpanded) return gif
+    return (
+      <Box flexDirection="column">
+        {row}
+        {gif}
       </Box>
     )
   })
