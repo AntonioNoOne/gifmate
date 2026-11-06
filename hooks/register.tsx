@@ -144,11 +144,16 @@ export const register: Register = on => {
     const close = () => update($, picker, () => CLOSED)
     const { Svg } = $.ui.resolve(e) as { Svg?: any }
     const send = async (p: GifmatePick) => {
-      await update($, picker, v => ({ ...v, status: 'Invio…' }))
+      // one GIF per press: the first press closes the tray, the later ones find nothing to send
+      let isFirst = false
+      await update($, picker, v => {
+        isFirst = v.isOpen
+        return CLOSED
+      })
+      if (!isFirst) return
       const sendTool = await toolNamed($, '__gif_send')
       const { text } = sendTool ? await $.tool.call({ tool: sendTool, source: p.gif } as any) : { text: '' }
       const file = pathFrom(text, SENT)
-      await close()
       if (file) await $.prompt.submit({ text: `GIF: ${p.title}\n${file}`, asUser: true })
     }
     const cards = await Promise.all(
