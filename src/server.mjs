@@ -52,10 +52,14 @@ function startWorker() {
     if (error) job?.reject(new Error(error));
     else job?.resolve(svg);
   });
+  // only this worker's jobs fail: a replacement worker may already be working on newer ones
   const fail = (err) => {
     if (worker === w) worker = null;
-    for (const [, job] of waiting) job.reject(err instanceof Error ? err : new Error(`preview worker stopped (${err})`));
-    waiting.clear();
+    for (const [id, job] of waiting) {
+      if (job.w !== w) continue;
+      waiting.delete(id);
+      job.reject(err instanceof Error ? err : new Error(`preview worker stopped (${err})`));
+    }
   };
   w.on("error", fail);
   w.on("exit", (code) => fail(code));
@@ -65,7 +69,7 @@ const animate = (bytes, options) =>
   new Promise((resolve, reject) => {
     worker ??= startWorker();
     const id = ++jobs;
-    waiting.set(id, { resolve, reject });
+    waiting.set(id, { resolve, reject, w: worker });
     worker.postMessage({ id, bytes: new Uint8Array(bytes), options });
   });
 

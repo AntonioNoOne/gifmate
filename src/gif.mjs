@@ -15,10 +15,10 @@ const MAX_WORK = 400_000_000; // frames × pixels: about 6 s of a 640×360 GIF a
 // A URL in a prompt may come from anyone: never let it reach this machine or its network.
 export function isPrivateAddress(address) {
   let a = address.toLowerCase();
-  // IPv4 written as IPv6, dotted (::ffff:10.0.0.1) or as URL parsers print it (::ffff:a00:1)
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
-  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(a);
-  if (mapped) a = mapped[1];
+  // IPv4 inside IPv6 (mapped ::ffff:x, translated ::ffff:0:x, compatible ::x), dotted or as URL parsers print it
+  const dotted = /^::(?:ffff:(?:0:)?)?(\d+\.\d+\.\d+\.\d+)$/.exec(a);
+  const hex = /^::(?:ffff:(?:0:)?)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(a);
+  if (dotted) a = dotted[1];
   else if (hex) {
     const [hi, lo] = [parseInt(hex[1], 16), parseInt(hex[2], 16)];
     a = [hi >> 8, hi & 255, lo >> 8, lo & 255].join(".");
@@ -32,7 +32,9 @@ export function isPrivateAddress(address) {
       (p === 192 && q === 0) || (p === 198 && (q === 18 || q === 19)) // IETF and benchmark ranges
     );
   }
-  return a === "::" || a === "::1" || /^f[cd]/.test(a) || /^fe[89ab]/.test(a) || /^ff/.test(a) || /^64:ff9b:/.test(a);
+  // IPv6: only global unicast (2000::/3) is public, minus documentation and 6to4 (which embeds any IPv4).
+  // An allowlist, so ranges nobody listed (site-local fec0::/10, NAT64, ...) are refused too.
+  return !/^[23][0-9a-f]{0,3}:/.test(a) || /^2001:0?db8:/.test(a) || /^2002:/.test(a);
 }
 
 // GIPHY serves from a few hosts: one DNS lookup a minute each, not one per preview. The check runs inside

@@ -9,7 +9,7 @@ test("refuses URLs that point at this machine or its network", async () => {
 });
 
 test("private and special addresses are recognised, public ones pass", () => {
-  for (const a of ["0.0.0.0", "10.1.2.3", "100.64.0.1", "169.254.1.1", "172.31.0.1", "192.168.0.1", "224.0.0.1", "::", "::1", "fd00::1", "fe80::1", "::ffff:169.254.0.1", "::ffff:ac10:1", "::ffff:7f00:1"]) {
+  for (const a of ["0.0.0.0", "10.1.2.3", "100.64.0.1", "169.254.1.1", "172.31.0.1", "192.168.0.1", "224.0.0.1", "::", "::1", "fd00::1", "fe80::1", "::ffff:169.254.0.1", "::ffff:ac10:1", "::ffff:7f00:1", "fec0::1", "::ffff:0:127.0.0.1", "::ffff:0:7f00:1", "::127.0.0.1", "64:ff9b::a00:1", "2002:7f00:1::", "2001:db8::1"]) {
     assert.equal(isPrivateAddress(a), true, a);
   }
   for (const a of ["151.101.1.1", "8.8.8.8", "2606:4700::1111"]) assert.equal(isPrivateAddress(a), false, a);
