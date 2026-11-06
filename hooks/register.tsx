@@ -180,21 +180,29 @@ export const register: Register = on => {
     const close = () => update($, picker, v => ({ ...CLOSED, attached: v.attached }))
     const { Svg } = $.ui.resolve(e) as { Svg?: any }
     // Manda sends the GIF now; Allega keeps it for the next message, sent when the person presses Enter
-    const pick = async (p: GifmatePick, isNow: boolean) => {
-      // one GIF per press: the first press closes the tray, the later ones find nothing to send
-      let isFirst = false
-      await update($, picker, v => {
-        isFirst = v.isOpen
-        return { ...CLOSED, attached: v.attached, status: 'Preparo la GIF…' }
-      })
-      if (!isFirst) return
+    const prepare = async (p: GifmatePick) => {
       const sendTool = await toolNamed($, '__gif_send')
       const { text } = sendTool ? await $.tool.call({ tool: sendTool, source: p.gif } as any) : { text: '' }
       const file = pathFrom(text, SENT)
-      if (!file) return
-      const gif = { title: p.title, file }
-      if (isNow) await $.prompt.submit({ text: gifMessage('', gif), asUser: true })
-      else await update($, picker, v => ({ ...v, attached: gif }))
+      return file ? { title: p.title, file } : null
+    }
+    // Invia: now. One GIF per press: the first press closes the tray, the later ones find nothing to send.
+    const sendNow = async (p: GifmatePick) => {
+      let isFirst = false
+      await update($, picker, v => {
+        isFirst = v.isOpen
+        return { ...CLOSED, attached: v.attached }
+      })
+      const gif = isFirst ? await prepare(p) : null
+      if (gif) await $.prompt.submit({ text: gifMessage('', gif), asUser: true })
+    }
+    // Allega: the tray stays open; the GIF leaves with the next message, when the person presses Enter.
+    const attach = async (p: GifmatePick) => {
+      await update($, picker, v => ({ ...v, status: `Allego “${p.title}”…` }))
+      const gif = await prepare(p)
+      await update($, picker, v =>
+        gif ? { ...v, attached: gif, status: 'Allegata: scrivi il messaggio e premi Invio' } : { ...v, status: 'Non sono riuscito ad allegarla' },
+      )
     }
     const cards = await Promise.all(
       picks.map(async (p, i) => {
@@ -210,8 +218,12 @@ export const register: Register = on => {
               </Box>
             )}
             <Box flexDirection="row" gap={1}>
-              <Button key={`send-${i}`} label="➤ Invia" plain onPress={() => pick(p, true)} />
-              <Button key={`attach-${i}`} label="📎 Allega" plain dimColor onPress={() => pick(p, false)} />
+              <Button key={`send-${i}`} label="➤ Invia" plain onPress={() => sendNow(p)} />
+              {attached?.title === p.title ? (
+                <Text>✓ Allegata</Text>
+              ) : (
+                <Button key={`attach-${i}`} label="📎 Allega" plain dimColor onPress={() => attach(p)} />
+              )}
             </Box>
           </Box>
         )
@@ -268,7 +280,7 @@ export const register: Register = on => {
       let attached: GifmateAttached | null = null
       await update($, picker, v => {
         attached = v.attached
-        return { ...v, attached: null }
+        return { ...v, attached: null, isOpen: v.attached ? false : v.isOpen } // sent: the tray's job is done
       })
       if (attached) return next({ ...e, text: gifMessage(e.text.trim(), attached) })
     }
