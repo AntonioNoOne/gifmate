@@ -17,8 +17,8 @@ function movingSquare() {
   return buf.subarray(0, gw.end());
 }
 
-const pixel = (b64, x, y) => {
-  const png = PNG.sync.read(Buffer.from(b64, "base64"));
+const pixel = (frame, x, y) => {
+  const png = PNG.sync.read(Buffer.from(frame.base64, "base64"));
   const i = (y * png.width + x) * 4;
   return [png.data[i], png.data[i + 1], png.data[i + 2]];
 };
@@ -28,9 +28,9 @@ test("returns spaced frames that show the motion and the colour change", () => {
   assert.equal(gif.totalFrames, 10);
   assert.equal(gif.duration.toFixed(1), "2.0");
   assert.deepEqual(gif.frames.map((f) => f.index), [0, 3, 6, 9]);
-  assert.deepEqual(pixel(gif.frames[0].png, 1, 9), [255, 0, 0]); // red, left
-  assert.deepEqual(pixel(gif.frames[3].png, 37, 9), [0, 0, 255]); // blue, right
-  assert.deepEqual(pixel(gif.frames[3].png, 1, 9), [255, 255, 255]); // it moved away
+  assert.deepEqual(pixel(gif.frames[0], 1, 9), [255, 0, 0]); // red, left
+  assert.deepEqual(pixel(gif.frames[3], 37, 9), [0, 0, 255]); // blue, right
+  assert.deepEqual(pixel(gif.frames[3], 1, 9), [255, 255, 255]); // it moved away
 });
 
 test("short GIFs come back whole", () => {

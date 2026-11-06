@@ -31,7 +31,7 @@ server.registerTool(
       const content = [{ type: "text", text: header }];
       for (const f of gif.frames) {
         content.push({ type: "text", text: `frame ${f.index + 1}/${gif.totalFrames} at ${f.time.toFixed(2)} s` });
-        content.push({ type: "image", data: f.png, mimeType: "image/png" });
+        content.push({ type: "image", data: f.base64, mimeType: f.mime });
       }
       return { content };
     } catch (err) {
@@ -44,7 +44,7 @@ server.registerTool(
   "gif_search",
   {
     description:
-      "Search GIPHY for a reaction GIF to send the user. Pick one by title (or preview it with gif_view on `small`), then send it with gif_send on its `small` URL. At most one per reply, and only when it fits the moment.",
+      "Search GIPHY for a reaction GIF to send the user. Pick one by title (or preview it with gif_view on `small`), then send it with gif_send on its `gif` URL. At most one per reply, and only when it fits the moment.",
     inputSchema: {
       query: z.string().describe("What the GIF should show, in English works best"),
       limit: z.number().int().min(1).max(12).default(6),
@@ -67,7 +67,7 @@ server.registerTool(
   "gif_send",
   {
     description:
-      "Send a GIF to the user in the chat. Pass the `small` URL of a gif_search result (or any GIF URL or local path). Clients with the gifmate chat mod draw it inline; others get a local file to open.",
+      "Send a GIF to the user in the chat. Pass the `gif` URL of a gif_search result (or any GIF URL or local path). Clients with the gifmate chat mod draw it inline; others get a local file to open.",
     inputSchema: {
       source: z.string().describe("GIF URL or local path"),
       caption: z.string().optional().describe("Short caption shown with the GIF"),

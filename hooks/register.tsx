@@ -37,10 +37,12 @@ export const register: Register = on => {
       )
     }
     const { Svg } = $.ui.resolve(e) as { Svg: any }
+    // draw at the SVG's own size: scaled up, small frames look blurry
+    const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(svg)
     return (
       <Box flexDirection="column">
         {row}
-        <Svg source={svg} alt="GIF" />
+        <Svg source={svg} alt="GIF" width={size?.[1] ? Number(size[1]) : undefined} height={size?.[2] ? Number(size[2]) : undefined} />
       </Box>
     )
   })

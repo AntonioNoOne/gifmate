@@ -1,6 +1,6 @@
 // Turn an animated GIF into a few still frames an agent can look at.
 import { readFile } from "node:fs/promises";
-import { GifReader } from "omggif";
+import { GifReader, GifWriter } from "omggif";
 import { PNG } from "pngjs";
 
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -53,34 +53,76 @@ export function pickIndexes(times, count) {
   return [...picked].sort((a, b) => a - b);
 }
 
-function toPng(rgba, width, height, maxSide) {
+// Nearest-neighbour downscale onto white (transparent pixels are not read as black).
+function flatten(rgba, width, height, maxSide) {
   const scale = Math.min(1, maxSide / Math.max(width, height));
   const w = Math.max(1, Math.round(width * scale));
   const h = Math.max(1, Math.round(height * scale));
-  const png = new PNG({ width: w, height: h });
+  const rgb = new Uint8Array(w * h * 3);
   for (let y = 0; y < h; y++) {
     const sy = Math.min(height - 1, Math.floor(y / scale));
     for (let x = 0; x < w; x++) {
-      const sx = Math.min(width - 1, Math.floor(x / scale));
-      const s = (sy * width + sx) * 4;
-      const d = (y * w + x) * 4;
-      // transparent pixels on white, so "nothing" is not read as black
+      const s = (sy * width + Math.min(width - 1, Math.floor(x / scale))) * 4;
+      const d = (y * w + x) * 3;
       const a = rgba[s + 3] / 255;
-      png.data[d] = rgba[s] * a + 255 * (1 - a);
-      png.data[d + 1] = rgba[s + 1] * a + 255 * (1 - a);
-      png.data[d + 2] = rgba[s + 2] * a + 255 * (1 - a);
-      png.data[d + 3] = 255;
+      for (let c = 0; c < 3; c++) rgb[d + c] = rgba[s + c] * a + 255 * (1 - a);
     }
   }
-  return PNG.sync.write(png).toString("base64");
+  return { w, h, rgb };
+}
+
+export function toPng(rgba, width, height, maxSide) {
+  const { w, h, rgb } = flatten(rgba, width, height, maxSide);
+  const png = new PNG({ width: w, height: h });
+  for (let i = 0; i < w * h; i++) {
+    png.data.set(rgb.subarray(i * 3, i * 3 + 3), i * 4);
+    png.data[i * 4 + 3] = 255;
+  }
+  return { mime: "image/png", base64: PNG.sync.write(png).toString("base64") };
+}
+
+// A one-frame GIF: far smaller than PNG for GIF content, which already fits 256 colours.
+export function toGif(rgba, width, height, maxSide) {
+  const { w, h, rgb } = flatten(rgba, width, height, maxSide);
+  const key = (i) => (rgb[i] << 16) | (rgb[i + 1] << 8) | rgb[i + 2];
+  let colours = new Map();
+  for (let i = 0; i < rgb.length && colours.size <= 256; i += 3) colours.set(key(i), 0);
+  // more than 256 colours: snap to a 6x7x6 cube
+  const cube = colours.size > 256;
+  const snap = (v, n) => Math.round((v / 255) * (n - 1)) * (255 / (n - 1));
+  const palette = [];
+  colours = new Map();
+  const pixels = new Uint8Array(w * h);
+  for (let p = 0; p < w * h; p++) {
+    const i = p * 3;
+    const c = cube ? (snap(rgb[i], 6) << 16) | (snap(rgb[i + 1], 7) << 8) | snap(rgb[i + 2], 6) : key(i);
+    let idx = colours.get(c);
+    if (idx === undefined) {
+      idx = palette.length;
+      colours.set(c, idx);
+      palette.push(c);
+    }
+    pixels[p] = idx;
+  }
+  let size = 2;
+  while (size < palette.length) size *= 2;
+  while (palette.length < size) palette.push(0);
+  const buf = new Uint8Array(w * h * 3 + 2048);
+  const writer = new GifWriter(buf, w, h, { palette });
+  writer.addFrame(0, 0, w, h, pixels);
+  return { mime: "image/gif", base64: Buffer.from(buf.subarray(0, writer.end())).toString("base64") };
 }
 
 // An SVG that plays the GIF with SMIL, for chat panels that draw SVG as an image
 // (an <img> does not animate a GIF nested inside an SVG). Fewer and smaller frames
 // until it fits `budget` characters.
 export function animatedSvg(bytes, { budget = 120_000 } = {}) {
-  for (const [count, side] of [[24, 200], [16, 180], [12, 160], [10, 140], [8, 120], [6, 100], [4, 90], [2, 80]]) {
-    const gif = framesOf(bytes, { maxFrames: count, maxSide: side });
+  // sharpness first: the biggest side that still fits at least 8 frames
+  const tries = [];
+  for (const side of [320, 280, 240, 200, 180, 160, 140, 120]) for (const count of [24, 16, 12, 8]) tries.push([count, side]);
+  tries.push([6, 120], [4, 100], [2, 100]);
+  for (const [count, side] of tries) {
+    const gif = framesOf(bytes, { maxFrames: count, maxSide: side, encode: toGif });
     const scale = Math.min(1, side / Math.max(gif.width, gif.height));
     const w = Math.max(1, Math.round(gif.width * scale));
     const h = Math.max(1, Math.round(gif.height * scale));
@@ -89,7 +131,7 @@ export function animatedSvg(bytes, { budget = 120_000 } = {}) {
       const start = f.time / dur;
       const end = i + 1 < gif.frames.length ? gif.frames[i + 1].time / dur : 1;
       return (
-        `<image width="${w}" height="${h}" visibility="hidden" href="data:image/png;base64,${f.png}">` +
+        `<image width="${w}" height="${h}" visibility="hidden" href="data:${f.mime};base64,${f.base64}">` +
         `<animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" ` +
         `keyTimes="0;${start.toFixed(4)};${end.toFixed(4)};1" dur="${dur.toFixed(2)}s" repeatCount="indefinite"/></image>`
       );
@@ -100,21 +142,20 @@ export function animatedSvg(bytes, { budget = 120_000 } = {}) {
   throw new Error("GIF too large to animate inline");
 }
 
-export function framesOf(bytes, { maxFrames = 12, maxSide = 384 } = {}) {
+export function framesOf(bytes, { maxFrames = 12, maxSide = 384, encode = toPng } = {}) {
   const reader = new GifReader(new Uint8Array(bytes));
-  const all = [...composite(reader)];
-  const last = reader.frameInfo(all.length - 1);
-  const duration = all[all.length - 1].time + (last.delay || 10) / 100;
-  const keep = pickIndexes(all.map((f) => f.time), maxFrames);
-  return {
-    width: reader.width,
-    height: reader.height,
-    totalFrames: all.length,
-    duration,
-    frames: keep.map((i) => ({
-      index: all[i].index,
-      time: all[i].time,
-      png: toPng(all[i].rgba, reader.width, reader.height, maxSide),
-    })),
-  };
+  const n = reader.numFrames();
+  const times = [];
+  let t = 0;
+  for (let i = 0; i < n; i++) {
+    times.push(t);
+    t += (reader.frameInfo(i).delay || 10) / 100;
+  }
+  const keep = new Set(pickIndexes(times, maxFrames));
+  const frames = [];
+  // composite in order, but hold only the frames we keep
+  for (const f of composite(reader)) {
+    if (keep.has(f.index)) frames.push({ index: f.index, time: f.time, ...encode(f.rgba, reader.width, reader.height, maxSide) });
+  }
+  return { width: reader.width, height: reader.height, totalFrames: n, duration: t, frames };
 }
