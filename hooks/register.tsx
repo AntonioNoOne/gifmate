@@ -69,7 +69,13 @@ async function search($: any, query: string) {
       const body = String(text)
       // results come as JSON; anything else is the server's own message (no results, no key)
       picks = body.trimStart().startsWith('[') ? JSON.parse(body.split('\n\nPowered')[0]) : []
-      status = picks.length ? 'Powered by GIPHY' : `Nessuna GIF per “${query}”. In inglese GIPHY trova di più: prova “cat”`
+      status = picks.length
+        ? 'Powered by GIPHY'
+        : /limit reached/i.test(body)
+          ? "Limite di GIPHY raggiunto: la chiave gratuita fa 100 ricerche l'ora. Riprova fra poco."
+          : /No GIF found/i.test(body)
+            ? `Nessuna GIF per “${query}”. In inglese GIPHY trova di più: prova “cat”`
+            : `Ricerca non riuscita: ${body}`
     } catch (err) {
       status = `Ricerca non riuscita: ${String(err)}`
     }
