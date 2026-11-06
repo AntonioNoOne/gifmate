@@ -165,6 +165,7 @@ export const register: Register = on => {
 
   // The picker sits above the prompt, like a chat app's GIF tray.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+   try {
     const { isOpen, status, picks, attached } = await read($, picker)
     const { Box, Text, Button, Input } = $.ui.resolve(e)
     // tray closed with a GIF attached: a small chip until the next message takes it
@@ -213,9 +214,8 @@ export const register: Register = on => {
             {thumb ? (
               sizedGif(Svg, thumb, THUMB, p.title)
             ) : (
-              <Box width={THUMB} height={THUMB} borderStyle="round" justifyContent="center" alignItems="center">
-                <Text dimColor>…</Text>
-              </Box>
+              // a Box measures in text rows, not pixels: a 90-row box overflowed the band and the whole tray was refused
+              <Text dimColor>⏳</Text>
             )}
             <Box flexDirection="row" gap={1}>
               <Button key={`send-${i}`} label="➤ Invia" plain onPress={() => sendNow(p)} />
@@ -241,6 +241,11 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
+   } catch (err) {
+    // a tray that fails to draw says why, instead of silently not appearing
+    const { Text } = $.ui.resolve(e)
+    return <Text color="red">gifmate: la fascia non si disegna: {String(err)}</Text>
+   }
   })
 
   // A GIF you sent from the tray: your words, then the GIF; not its title and file path.
