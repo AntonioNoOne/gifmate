@@ -1,5 +1,6 @@
 import type { Register } from 'claude-code'
 
+const SHOW_HEIGHT = 140
 const SENT = /gifmate-sent: (.+?\.gif)/i
 const SVG = /gifmate-svg: (.+?\.svg)/i
 const GIF_REF = /(?:https?:\/\/\S+?\.gif|(?:[A-Za-z]:)?[^\s"'<>|]*\.gif)(?=[\s"'),.]|$)/gi
@@ -37,12 +38,14 @@ export const register: Register = on => {
       )
     }
     const { Svg } = $.ui.resolve(e) as { Svg: any }
-    // draw at the SVG's own size: scaled up, small frames look blurry
+    // never scaled up (blurry), and no taller than a chat line of thumbnails
     const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(svg)
+    const [w, ht] = size ? [Number(size[1]), Number(size[2])] : [SHOW_HEIGHT, SHOW_HEIGHT]
+    const shown = Math.min(1, SHOW_HEIGHT / ht)
     return (
       <Box flexDirection="column">
         {row}
-        <Svg source={svg} alt="GIF" width={size?.[1] ? Number(size[1]) : undefined} height={size?.[2] ? Number(size[2]) : undefined} />
+        <Svg source={svg} alt="GIF" width={Math.round(w * shown)} height={Math.round(ht * shown)} />
       </Box>
     )
   })
