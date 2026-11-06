@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { animatedSvg, framesOf, loadBytes } from "./gif.mjs";
 import { searchGiphy } from "./giphy.mjs";
+import { GIF_RULES } from "./rules.mjs";
 
 if (process.argv[2] === "setup") {
   const { createInterface } = await import("node:readline/promises");
@@ -21,7 +22,7 @@ if (process.argv[2] === "setup") {
   process.exit(0);
 }
 
-const server = new McpServer({ name: "gifmate", version: "0.1.0" });
+const server = new McpServer({ name: "gifmate", version: "0.1.0" }, { instructions: GIF_RULES });
 
 // Keep the GIF and an SMIL SVG that plays it (chat panels animate SVG, not a GIF inside one).
 async function saveGif(bytes, budget) {
@@ -72,7 +73,7 @@ server.registerTool(
   "gif_search",
   {
     description:
-      "Search GIPHY for a reaction GIF to send the user. Pick one by title (or preview it with gif_view on `small`), then send it with gif_send on its `gif` URL. At most one per reply, and only when it fits the moment.",
+      "Search GIPHY for a reaction GIF to send the user, then send it with gif_send on its `gif` URL. Follow gifmate's rules: only at a moment that earns it (a hard-won win, good news, a kickoff, a warm sign-off), never when something failed or the user is stressed, at most one per reply and not two replies in a row. Search the feeling in English, pick by title.",
     inputSchema: {
       query: z.string().describe("What the GIF should show, in English works best"),
       limit: z.number().int().min(1).max(12).default(6),
