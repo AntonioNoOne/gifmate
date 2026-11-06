@@ -96,8 +96,12 @@ export const register: Register = on => {
     } else {
       try {
         const { text } = await $.tool.call({ tool: search, query, limit: 6, thumbs: true } as any)
-        picks = JSON.parse(String(text).split('\n\nPowered')[0])
-        status = picks.length ? 'Powered by GIPHY' : `Nessuna GIF per “${query}”.`
+        const body = String(text)
+        // results come as JSON; anything else is the server's own message (no results, no key)
+        picks = body.trimStart().startsWith('[') ? JSON.parse(body.split('\n\nPowered')[0]) : []
+        status = picks.length
+          ? 'Powered by GIPHY'
+          : `Nessuna GIF per “${query}”. GIPHY capisce meglio l'inglese: prova /gif cat applause`
       } catch (err) {
         status = `Ricerca non riuscita: ${String(err)}`
         $.ui.toast(status)
