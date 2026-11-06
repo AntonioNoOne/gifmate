@@ -60,17 +60,23 @@ It saves the key in your user config (`%APPDATA%\gifmate\config.json` on Windows
 
 ## Use
 
-- `/gif` opens the tray above the prompt: type a search (English works best on GIPHY), pick one, press **Manda**.
-- `/gif cat applause` opens it with results already there.
-- "What happens in this GIF? `C:\Users\me\Downloads\bug.gif`": the agent watches it.
-- "Tests are green, send me a GIF": the agent searches GIPHY and sends one.
+- `/gif` opens the tray above the prompt with what is trending; type to search (results follow as you type;
+  Italian reaction words are translated, since GIPHY finds little in Italian).
+- **➤ Invia** sends a GIF now. **📎 Allega** attaches it to your next message: write, press Enter, both go together.
+- `deploy done /gif lets go`: `/gif` anywhere in a sentence keeps your words and opens the tray on the rest.
+- "What happens in this GIF? `C:\Users\me\Downloads\bug.gif`": the agent watches it frame by frame.
+- The agent sends GIFs on its own only when the moment earns one (a hard-won win, good news, a kickoff),
+  never when something broke; a GIF you send is read as a message, not described back.
+
+A free GIPHY key allows 100 searches an hour; repeated searches are remembered for 10 minutes. GIPHY offers
+production keys with higher limits on request.
 
 ## Privacy
 
 - Searches go to GIPHY, with your key.
 - When the agent watches a GIF, its frames become part of the conversation, so they reach your model
   provider like any image you paste. The GIF file itself is not uploaded anywhere by gifmate.
-- Sent GIFs are kept in your temp folder (`gifmate/`) so the chat can draw them.
+- Sent GIFs and previews are kept in your temp folder (`gifmate/`) so the chat can draw them, and removed after a day.
 - URLs pointing at your machine or local network (localhost, 10.x, 192.168.x, ...) are refused, downloads
   stop at 20 MB and 15 seconds, and GIFs over 4096×4096 are not decoded.
 

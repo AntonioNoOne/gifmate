@@ -32,10 +32,15 @@ const picker = atom({ plugin: 'gifmate', key: 'picker' } as const, CLOSED, { sha
 // The GIF as a chat message: optional words, then the GIF's title and file (what prompt.submit reads back).
 const gifMessage = (words: string, a: GifmateAttached) => `${words ? words + '\n' : ''}GIF: ${a.title}\n${a.file}`
 
-// The gifmate tools by suffix: the prefix depends on how gifmate was installed.
+// The gifmate tools by suffix: the prefix depends on how gifmate was installed. Listing every tool
+// on each keystroke slowed typing down, so the names are looked up once.
+const toolNames = new Map<string, string>()
 async function toolNamed($: any, suffix: string): Promise<string | undefined> {
+  if (toolNames.has(suffix)) return toolNames.get(suffix)
   const tools: { name: string }[] = await $.tool.list()
-  return tools.find(t => /gifmate/i.test(t.name) && t.name.endsWith(suffix))?.name
+  const name = tools.find(t => /gifmate/i.test(t.name) && t.name.endsWith(suffix))?.name
+  if (name) toolNames.set(suffix, name)
+  return name
 }
 
 // Previews never change once written: read each file once, not on every redraw.
@@ -57,12 +62,12 @@ async function svgOf($: any, path: string | undefined): Promise<string> {
 // One search, shared by `/gif <what>` and the tray's own search box.
 let lastSearch = 0
 async function search($: any, query: string) {
-  let status = query ? `Cerco “${query}”…` : 'Scrivi qui sotto cosa cercare (in inglese funziona meglio) e premi Invio'
+  let status = query ? `Cerco “${query}”…` : 'Di tendenza su GIPHY…'
   let picks: GifmatePick[] = []
   const seq = ++lastSearch
   // keep the current row while searching: emptying it made the GIFs blink at every pause in typing
   await update($, picker, v => ({ ...v, isOpen: true, status }))
-  if (!query) return
+  // an empty search shows what is trending, so the tray is never empty while you type
   const tool = await toolNamed($, '__gif_search')
   if (!tool) {
     status = 'gifmate non è collegato in questa sessione.'
@@ -73,11 +78,13 @@ async function search($: any, query: string) {
       // results come as JSON; anything else is the server's own message (no results, no key)
       picks = body.trimStart().startsWith('[') ? JSON.parse(body.split('\n\nPowered')[0]) : []
       status = picks.length
-        ? 'Powered by GIPHY'
+        ? query
+          ? 'Powered by GIPHY'
+          : 'Di tendenza · scrivi per cercare, anche in italiano · Powered by GIPHY'
         : /limit reached/i.test(body)
           ? "Limite di GIPHY raggiunto: la chiave gratuita fa 100 ricerche l'ora. Riprova fra poco."
           : /No GIF found/i.test(body)
-            ? `Nessuna GIF per “${query}”. In inglese GIPHY trova di più: prova “cat”`
+            ? `Nessuna GIF per “${query}”. Prova un'altra parola.`
             : `Ricerca non riuscita: ${body}`
     } catch (err) {
       status = `Ricerca non riuscita: ${String(err)}`
@@ -98,8 +105,8 @@ let typed = ''
 async function searchWhileTyping($: any, value: string) {
   typed = value.trim()
   const mine = typed
-  await $.clock.sleep(450)
-  if (mine === typed && mine.length >= 2) await search($, mine)
+  await $.clock.sleep(300)
+  if (mine === typed && (mine.length >= 2 || !mine)) await search($, mine)
 }
 
 export const register: Register = on => {

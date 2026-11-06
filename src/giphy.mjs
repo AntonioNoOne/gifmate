@@ -1,5 +1,6 @@
 // GIPHY search. Needs a free key from https://developers.giphy.com (env GIPHY_API_KEY or `gifmate setup`).
 import { giphyKey } from "./config.mjs";
+import { toEnglish } from "./translate.mjs";
 
 // A free key allows 100 searches an hour and searching while typing repeats words: the same search
 // within 10 minutes is answered from memory.
@@ -15,8 +16,10 @@ export async function searchGiphy(query, { limit = 6, rating = "pg" } = {}) {
   if (!key) {
     throw new Error("No GIPHY key yet. Tell the user: get a free API key at https://developers.giphy.com (Create an App, type API), then run `npx gifmate setup` and paste it.");
   }
-  const url = new URL("https://api.giphy.com/v1/gifs/search");
-  url.search = new URLSearchParams({ api_key: key, q: query, limit: String(limit), rating }).toString();
+  // an empty search shows what is trending, so an opened tray is never empty
+  const q = toEnglish(query.trim());
+  const url = new URL(`https://api.giphy.com/v1/gifs/${q ? "search" : "trending"}`);
+  url.search = new URLSearchParams({ api_key: key, ...(q ? { q } : {}), limit: String(limit), rating }).toString();
   const res = await fetch(url);
   if (res.status === 429) {
     throw new Error("GIPHY limit reached: a free key allows 100 searches an hour. Try again in a while.");

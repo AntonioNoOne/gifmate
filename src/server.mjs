@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
@@ -24,6 +24,19 @@ if (process.argv[2] === "setup") {
 }
 
 const server = new McpServer({ name: "gifmate", version: "0.1.0" }, { instructions: GIF_RULES });
+
+// Sent GIFs and previews live in the temp folder for the chat to draw; a day later nobody needs them.
+const DIR = join(tmpdir(), "gifmate");
+void readdir(DIR)
+  .then((names) =>
+    Promise.all(
+      names.map(async (n) => {
+        const f = join(DIR, n);
+        if (Date.now() - (await stat(f)).mtimeMs > 24 * 3600_000) await rm(f, { force: true });
+      }),
+    ),
+  )
+  .catch(() => {});
 
 // Animated SVGs are CPU work: a worker thread builds them, so the server keeps answering meanwhile
 // (on the main thread a search waited up to 2.6 s behind the previous search's previews).
@@ -76,6 +89,7 @@ const fail = (err) => ({ isError: true, content: [{ type: "text", text: String(e
 server.registerTool(
   "gif_view",
   {
+    annotations: { readOnlyHint: true, openWorldHint: true },
     description:
       "Watch an animated GIF. Image readers show only its first frame; this returns frames evenly spaced in time, in order, with timestamps, so you can follow the motion. Use it whenever the user shares a .gif (local path or URL), and to preview a GIF before sending one.",
     inputSchema: {
@@ -102,10 +116,11 @@ server.registerTool(
 server.registerTool(
   "gif_search",
   {
+    annotations: { readOnlyHint: true, openWorldHint: true },
     description:
       "Search GIPHY for a reaction GIF to send the user, then send it with gif_send on its `gif` URL. Follow gifmate's rules: only at a moment that earns it (a hard-won win, good news, a kickoff, a warm sign-off), never when something failed or the user is stressed, at most one per reply and not two replies in a row. Search the feeling in English, pick by title.",
     inputSchema: {
-      query: z.string().describe("What the GIF should show, in English works best"),
+      query: z.string().describe("The feeling to show, in English or Italian (Italian reaction words are translated). Empty: what is trending."),
       limit: z.number().int().min(1).max(12).default(6),
       thumbs: z.boolean().default(false).describe("Also save a small animated preview (SVG) of each result, for a picker UI"),
     },
@@ -142,6 +157,7 @@ server.registerTool(
 server.registerTool(
   "gif_send",
   {
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     description:
       "Send a GIF to the user in the chat. Pass the `gif` URL of a gif_search result (or any GIF URL or local path). Clients with the gifmate chat mod draw it inline; others get a local file to open.",
     inputSchema: {
