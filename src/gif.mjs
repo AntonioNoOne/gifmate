@@ -115,34 +115,40 @@ export function toGif(rgba, width, height, maxSide) {
 
 // An SVG that plays the GIF with SMIL, for chat panels that draw SVG as an image
 // (an <img> does not animate a GIF nested inside an SVG). Fewer and smaller frames
-// until it fits `budget` characters.
+// until it fits `budget` characters. The GIF is decoded once; the tries only re-encode.
 export function animatedSvg(bytes, { budget = 120_000 } = {}) {
+  const gif = keyFrames(bytes, 24);
+  const dur = gif.duration || 1;
   // sharpness first: the biggest side that still fits at least 8 frames
   const tries = [];
   for (const side of [320, 280, 240, 200, 180, 160, 140, 120]) for (const count of [24, 16, 12, 8]) tries.push([count, side]);
   tries.push([6, 120], [4, 100], [2, 100], [4, 80], [2, 64]);
   for (const [count, side] of tries) {
-    const gif = framesOf(bytes, { maxFrames: count, maxSide: side, encode: toGif });
+    const frames = pickIndexes(gif.frames.map((f) => f.time), count).map((i) => gif.frames[i]);
     const scale = Math.min(1, side / Math.max(gif.width, gif.height));
     const w = Math.max(1, Math.round(gif.width * scale));
     const h = Math.max(1, Math.round(gif.height * scale));
-    const dur = gif.duration || 1;
-    const images = gif.frames.map((f, i) => {
-      const start = f.time / dur;
-      const end = i + 1 < gif.frames.length ? gif.frames[i + 1].time / dur : 1;
-      return (
-        `<image width="${w}" height="${h}" visibility="hidden" href="data:${f.mime};base64,${f.base64}">` +
+    let size = 0;
+    const images = [];
+    for (let i = 0; i < frames.length && size <= budget; i++) {
+      const { mime, base64 } = toGif(frames[i].rgba, gif.width, gif.height, side);
+      const start = frames[i].time / dur;
+      const end = i + 1 < frames.length ? frames[i + 1].time / dur : 1;
+      const image =
+        `<image width="${w}" height="${h}" visibility="hidden" href="data:${mime};base64,${base64}">` +
         `<animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" ` +
-        `keyTimes="0;${start.toFixed(4)};${end.toFixed(4)};1" dur="${dur.toFixed(2)}s" repeatCount="indefinite"/></image>`
-      );
-    });
+        `keyTimes="0;${start.toFixed(4)};${end.toFixed(4)};1" dur="${dur.toFixed(2)}s" repeatCount="indefinite"/></image>`;
+      size += image.length;
+      images.push(image);
+    }
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${images.join("")}</svg>`;
-    if (svg.length <= budget) return { svg, width: w, height: h, frames: gif.frames.length };
+    if (svg.length <= budget) return { svg, width: w, height: h, frames: frames.length };
   }
   throw new Error("GIF too large to animate inline");
 }
 
-export function framesOf(bytes, { maxFrames = 12, maxSide = 384, encode = toPng } = {}) {
+// Decode once, composite in order, keep only `maxFrames` frames evenly spaced in time.
+function keyFrames(bytes, maxFrames) {
   const reader = new GifReader(new Uint8Array(bytes));
   const n = reader.numFrames();
   const times = [];
@@ -153,9 +159,14 @@ export function framesOf(bytes, { maxFrames = 12, maxSide = 384, encode = toPng 
   }
   const keep = new Set(pickIndexes(times, maxFrames));
   const frames = [];
-  // composite in order, but hold only the frames we keep
-  for (const f of composite(reader)) {
-    if (keep.has(f.index)) frames.push({ index: f.index, time: f.time, ...encode(f.rgba, reader.width, reader.height, maxSide) });
-  }
+  for (const f of composite(reader)) if (keep.has(f.index)) frames.push(f);
   return { width: reader.width, height: reader.height, totalFrames: n, duration: t, frames };
+}
+
+export function framesOf(bytes, { maxFrames = 12, maxSide = 384, encode = toPng } = {}) {
+  const gif = keyFrames(bytes, maxFrames);
+  return {
+    ...gif,
+    frames: gif.frames.map((f) => ({ index: f.index, time: f.time, ...encode(f.rgba, gif.width, gif.height, maxSide) })),
+  };
 }

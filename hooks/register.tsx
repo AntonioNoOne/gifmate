@@ -58,6 +58,15 @@ async function search($: any, query: string) {
   await update($, picker, () => ({ isOpen: true, status, picks }))
 }
 
+// Search while typing: wait until the person pauses, so a free GIPHY key (100 searches an hour) lasts.
+let typed = ''
+async function searchWhileTyping($: any, value: string) {
+  typed = value.trim()
+  const mine = typed
+  await $.clock.sleep(700)
+  if (mine === typed && mine.length >= 2) await search($, mine)
+}
+
 export const register: Register = on => {
   // Me -> you: play the GIF gif_send prepared (an SMIL SVG), under its tool row.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
@@ -158,7 +167,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" gap={1}>
-          <Input key="gif-query" placeholder="Cerca una GIF…" submitLabel="Cerca" autoFocus onSubmit={(q: string) => search($, q.trim())} />
+          <Input key="gif-query" placeholder="Cerca una GIF…" submitLabel="Cerca" autoFocus onInput={(q: string) => searchWhileTyping($, q)} onSubmit={(q: string) => search($, q.trim())} />
           <Button key="gif-close" label="Chiudi" onPress={close} />
         </Box>
         <Text dimColor>{status}</Text>
