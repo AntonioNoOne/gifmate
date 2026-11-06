@@ -1,0 +1,5 @@
+{
+  "name": "gifmate",
+  "owner": { "name": "Antonio Arcodia" },
+  "plugins": [{ "name": "gifmate", "source": "./", "description": "Watch animated GIFs frame by frame and send GIFs back from GIPHY." }]
+}

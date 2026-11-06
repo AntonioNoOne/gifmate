@@ -1,0 +1,13 @@
+{
+  "name": "gifmate",
+  "version": "0.1.0",
+  "description": "Watch animated GIFs frame by frame and send GIFs back from GIPHY.",
+  "license": "MIT",
+  "mcpServers": {
+    "gifmate": {
+      "command": "npx",
+      "args": ["-y", "gifmate@0.1.0"],
+      "env": { "GIPHY_API_KEY": "${GIPHY_API_KEY}" }
+    }
+  }
+}
