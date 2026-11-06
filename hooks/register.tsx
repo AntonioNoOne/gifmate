@@ -8,9 +8,10 @@ const SHOW_HEIGHT = 180
 // A GIF's SVG at its own proportions, never scaled up (blurry), at most `maxHeight` tall.
 function sizedGif(Svg: any, svg: string, maxHeight = SHOW_HEIGHT, alt = 'GIF') {
   const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(svg)
-  const [w, h] = size ? [Number(size[1]), Number(size[2])] : [maxHeight, maxHeight]
-  const k = Math.min(1, maxHeight / h)
-  return <Svg source={svg} alt={alt} width={Math.round(w * k)} height={Math.round(h * k)} />
+  // never name anything `h` in a mod: it hides the JSX factory and every element after it throws
+  const [width, height] = size ? [Number(size[1]), Number(size[2])] : [maxHeight, maxHeight]
+  const k = Math.min(1, maxHeight / height)
+  return <Svg source={svg} alt={alt} width={Math.round(width * k)} height={Math.round(height * k)} />
 }
 const SENT = /gifmate-sent: (.+?\.gif)/i
 const SVG = /gifmate-svg: (.+?\.svg)/i
@@ -22,7 +23,7 @@ function pathFrom(output: unknown, re: RegExp): string | undefined {
   return re.exec(text)?.[1]?.replace(/\\\\/g, '\\')
 }
 
-const THUMB = 90
+const THUMB = 120
 
 // In the engine's state, so the tray redraws the moment a search lands.
 const CLOSED: GifmatePicker = { isOpen: false, status: '', picks: [], attached: null }
