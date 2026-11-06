@@ -205,6 +205,16 @@ export const register: Register = on => {
       void search($, e.command.args.trim())
       return { drop: 'gifmate: GIF tray opened' }
     }
+    // A GIF sent from the tray is a message, like in any chat: its meaning, not its pixels.
+    const reply = /^GIF: (.*)\n(\S+\.gif)\s*$/.exec(e.text)
+    if (reply) {
+      const note =
+        `The user answered with a GIF instead of words. Its GIPHY title: «${reply[1]}». ` +
+        'Treat it as their message: read what they mean (GIFs are often ironic or a reaction to your last reply) and answer that, ' +
+        'as a teammate would, in their language. Do not describe the GIF. ' +
+        `Only if the title is not enough to get the meaning, glance at it with gifmate's gif_view on ${reply[2]} with max_frames 3.`
+      return next({ ...e, context: [...(e.context ?? []), note] })
+    }
     const refs = [...new Set(e.text.match(GIF_REF) ?? [])]
     const pasted = (e.attachments ?? []).filter(a => a.mediaType === 'image/gif')
     if (!refs.length && !pasted.length) return next(e)
