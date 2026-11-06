@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { GifmatePick, GifmatePicker } from '../types'
+import type { GifmateAttached, GifmatePick, GifmatePicker } from '../types'
 
 const SHOW_HEIGHT = 180
 const SENT = /gifmate-sent: (.+?\.gif)/i
@@ -17,8 +17,11 @@ function pathFrom(output: unknown, re: RegExp): string | undefined {
 const THUMB = 90
 
 // In the engine's state, so the tray redraws the moment a search lands.
-const CLOSED: GifmatePicker = { isOpen: false, status: '', picks: [] }
-const picker = atom({ plugin: 'gifmate', key: 'picker' } as const, CLOSED, { shape: 'picker-1' })
+const CLOSED: GifmatePicker = { isOpen: false, status: '', picks: [], attached: null }
+const picker = atom({ plugin: 'gifmate', key: 'picker' } as const, CLOSED, { shape: 'picker-2' })
+
+// The GIF as a chat message: optional words, then the GIF's title and file (what prompt.submit reads back).
+const gifMessage = (words: string, a: GifmateAttached) => `${words ? words + '\n' : ''}GIF: ${a.title}\n${a.file}`
 
 // The gifmate tools by suffix: the prefix depends on how gifmate was installed.
 async function toolNamed($: any, suffix: string): Promise<string | undefined> {
@@ -39,7 +42,7 @@ async function svgOf($: any, path: string | undefined): Promise<string> {
 async function search($: any, query: string) {
   let status = query ? `Cerco “${query}”…` : 'Scrivi qui sotto cosa cercare (in inglese funziona meglio) e premi Invio'
   let picks: GifmatePick[] = []
-  await update($, picker, () => ({ isOpen: true, status, picks }))
+  await update($, picker, v => ({ ...v, isOpen: true, status, picks }))
   if (!query) return
   const tool = await toolNamed($, '__gif_search')
   if (!tool) {
@@ -55,7 +58,7 @@ async function search($: any, query: string) {
       status = `Ricerca non riuscita: ${String(err)}`
     }
   }
-  await update($, picker, () => ({ isOpen: true, status, picks }))
+  await update($, picker, v => ({ ...v, isOpen: true, status, picks }))
 }
 
 // Search while typing: wait until the person pauses, so a free GIPHY key (100 searches an hour) lasts.
@@ -138,23 +141,36 @@ export const register: Register = on => {
 
   // The picker sits above the prompt, like a chat app's GIF tray.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const { isOpen, status, picks } = await read($, picker)
-    if (!isOpen) return next(e)
+    const { isOpen, status, picks, attached } = await read($, picker)
     const { Box, Text, Button, Input } = $.ui.resolve(e)
-    const close = () => update($, picker, () => CLOSED)
+    // tray closed with a GIF attached: a small chip until the next message takes it
+    if (!isOpen && attached) {
+      return (
+        <Box flexDirection="row" gap={1}>
+          <Text>📎 GIF allegata: {attached.title}</Text>
+          <Button key="gif-unattach" label="✕" onPress={() => update($, picker, v => ({ ...v, attached: null }))} />
+        </Box>
+      )
+    }
+    if (!isOpen) return next(e)
+    const close = () => update($, picker, v => ({ ...CLOSED, attached: v.attached }))
     const { Svg } = $.ui.resolve(e) as { Svg?: any }
-    const send = async (p: GifmatePick) => {
+    // Manda sends the GIF now; Allega keeps it for the next message, sent when the person presses Enter
+    const pick = async (p: GifmatePick, isNow: boolean) => {
       // one GIF per press: the first press closes the tray, the later ones find nothing to send
       let isFirst = false
       await update($, picker, v => {
         isFirst = v.isOpen
-        return CLOSED
+        return { ...CLOSED, attached: v.attached, status: 'Preparo la GIF…' }
       })
       if (!isFirst) return
       const sendTool = await toolNamed($, '__gif_send')
       const { text } = sendTool ? await $.tool.call({ tool: sendTool, source: p.gif } as any) : { text: '' }
       const file = pathFrom(text, SENT)
-      if (file) await $.prompt.submit({ text: `GIF: ${p.title}\n${file}`, asUser: true })
+      if (!file) return
+      const gif = { title: p.title, file }
+      if (isNow) await $.prompt.submit({ text: gifMessage('', gif), asUser: true })
+      else await update($, picker, v => ({ ...v, attached: gif }))
     }
     const cards = await Promise.all(
       picks.map(async (p, i) => {
@@ -164,7 +180,10 @@ export const register: Register = on => {
         return (
           <Box flexDirection="column" alignItems="center">
             {thumb ? <Svg source={thumb} alt={p.title} width={w} height={THUMB} /> : <Text>{p.title}</Text>}
-            <Button key={`send-${i}`} label="Manda" onPress={() => send(p)} />
+            <Box flexDirection="row" gap={1}>
+              <Button key={`send-${i}`} label="Manda" onPress={() => pick(p, true)} />
+              <Button key={`attach-${i}`} label="Allega" onPress={() => pick(p, false)} />
+            </Box>
           </Box>
         )
       }),
@@ -205,19 +224,38 @@ export const register: Register = on => {
   // You -> me: a GIF named in the prompt goes to gif_view, not to the image reader.
   // One prompt.submit hook (the engine allows one per event without a matcher):
   // /gif opens the tray instead of reaching the model; a GIF named in a prompt goes to gif_view.
-  on('prompt.submit', ($, e, next) => {
+  on('prompt.submit', async ($, e, next) => {
     if (e.command && /^(gifmate:)?gif$/.test(e.command.name)) {
       void search($, e.command.args.trim())
       return { drop: 'gifmate: GIF tray opened' }
     }
+    // `/gif` inside a sentence ("deploy done /gif lets go"): give the words back to the prompt box and open
+    // the tray on the rest; the person attaches a GIF and sends both with Enter.
+    const inline = !e.command && !e.isMeta && e.origin?.kind !== 'plugin' ? /^([\s\S]*?)(?:^|\s)\/(?:gifmate:)?gif(?:\s+([^\n]*))?\s*$/.exec(e.text) : null
+    if (inline) {
+      void search($, (inline[2] ?? '').trim())
+      if (inline[1].trim()) void $.prompt.fill({ text: inline[1].trim() + ' ', mode: 'replace' })
+      return { drop: 'gifmate: GIF tray opened' }
+    }
+    // An attached GIF leaves with the person's next message.
+    if (!e.command && !e.isMeta && e.origin?.kind !== 'plugin') {
+      let attached: GifmateAttached | null = null
+      await update($, picker, v => {
+        attached = v.attached
+        return { ...v, attached: null }
+      })
+      if (attached) return next({ ...e, text: gifMessage(e.text.trim(), attached) })
+    }
     // A GIF sent from the tray is a message, like in any chat: its meaning, not its pixels.
-    const reply = /^GIF: (.*)\n(\S+\.gif)\s*$/.exec(e.text)
+    const reply = /^([\s\S]*?)\n?GIF: (.*)\n(\S+\.gif)\s*$/.exec(e.text)
     if (reply) {
       const note =
-        `The user answered with a GIF instead of words. Its GIPHY title: «${reply[1]}». ` +
+        (reply[1].trim()
+          ? `The user wrote the text above and attached a GIF to set its tone. Its GIPHY title: «${reply[2]}». The text leads; the GIF says how they feel about it. `
+          : `The user answered with a GIF instead of words. Its GIPHY title: «${reply[2]}». `) +
         'Treat it as their message: read what they mean (GIFs are often ironic or a reaction to your last reply) and act on it, ' +
         'as a teammate would, in their language. Do not describe the GIF, and answer with words, not with a GIF of your own. ' +
-        `Only if the title is not enough to get the meaning, glance at it with gifmate's gif_view on ${reply[2]} with max_frames 3.`
+        `Only if the title is not enough to get the meaning, glance at it with gifmate's gif_view on ${reply[3]} with max_frames 3.`
       return next({ ...e, context: [...(e.context ?? []), note] })
     }
     const refs = [...new Set(e.text.match(GIF_REF) ?? [])]
