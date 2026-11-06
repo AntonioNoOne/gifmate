@@ -29,10 +29,15 @@ async function toolNamed($: any, suffix: string): Promise<string | undefined> {
   return tools.find(t => /gifmate/i.test(t.name) && t.name.endsWith(suffix))?.name
 }
 
+// Previews never change once written: read each file once, not on every redraw.
+const svgCache = new Map<string, string>()
 async function svgOf($: any, path: string | undefined): Promise<string> {
   if (!path) return ''
+  if (svgCache.has(path)) return svgCache.get(path) as string
   try {
-    return await $.fs.read(path)
+    const svg: string = await $.fs.read(path)
+    svgCache.set(path, svg)
+    return svg
   } catch {
     return ''
   }
@@ -42,7 +47,8 @@ async function svgOf($: any, path: string | undefined): Promise<string> {
 async function search($: any, query: string) {
   let status = query ? `Cerco “${query}”…` : 'Scrivi qui sotto cosa cercare (in inglese funziona meglio) e premi Invio'
   let picks: GifmatePick[] = []
-  await update($, picker, v => ({ ...v, isOpen: true, status, picks }))
+  // keep the current row while searching: emptying it made the GIFs blink at every pause in typing
+  await update($, picker, v => ({ ...v, isOpen: true, status }))
   if (!query) return
   const tool = await toolNamed($, '__gif_search')
   if (!tool) {
@@ -148,7 +154,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="row" gap={1}>
           <Text>📎 GIF allegata: {attached.title}</Text>
-          <Button key="gif-unattach" label="✕" onPress={() => update($, picker, v => ({ ...v, attached: null }))} />
+          <Button key="gif-unattach" label="✕" plain dimColor onPress={() => update($, picker, v => ({ ...v, attached: null }))} />
         </Box>
       )
     }
@@ -181,8 +187,8 @@ export const register: Register = on => {
           <Box flexDirection="column" alignItems="center">
             {thumb ? <Svg source={thumb} alt={p.title} width={w} height={THUMB} /> : <Text>{p.title}</Text>}
             <Box flexDirection="row" gap={1}>
-              <Button key={`send-${i}`} label="Manda" onPress={() => pick(p, true)} />
-              <Button key={`attach-${i}`} label="Allega" onPress={() => pick(p, false)} />
+              <Button key={`send-${i}`} label="➤ Invia" plain onPress={() => pick(p, true)} />
+              <Button key={`attach-${i}`} label="📎 Allega" plain dimColor onPress={() => pick(p, false)} />
             </Box>
           </Box>
         )
@@ -192,7 +198,7 @@ export const register: Register = on => {
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" gap={1}>
           <Input key="gif-query" placeholder="Cerca una GIF…" submitLabel="Cerca" autoFocus onInput={(q: string) => searchWhileTyping($, q)} onSubmit={(q: string) => search($, q.trim())} />
-          <Button key="gif-close" label="Chiudi" onPress={close} />
+          <Button key="gif-close" label="✕" plain dimColor role="dismiss" onPress={close} />
         </Box>
         <Text dimColor>{status}</Text>
         <Box flexDirection="row" gap={1}>
