@@ -1,70 +1,86 @@
 # gifmate
 
-Send GIFs to your coding agent, and get GIFs back, like with a teammate.
+Trade GIFs with your coding agent, like with a teammate.
 
-Agents read only the first frame of an animated GIF, so a screen recording of a bug
-or a reaction GIF reaches them as a still picture. gifmate is a small
-[MCP](https://modelcontextprotocol.io) server that fixes both directions:
+- **You → agent**: send a GIF from a GIPHY tray right in the chat (`/gif`). The agent takes it the way a
+  teammate would: as a message ("let's go!", "this is fine"), not as a picture to describe.
+  Share a GIF file instead (a screen recording of a bug) and the agent watches it frame by frame.
+- **Agent → you**: the agent picks a GIF on GIPHY and it plays inline in the chat.
 
-- **`gif_view`**: you share a GIF (local path or URL), the agent receives frames
-  evenly spaced in time, in order, with timestamps, and follows the motion.
-- **`gif_search`**: the agent searches [GIPHY](https://developers.giphy.com) and
-  replies with a GIF, as a markdown image.
+Agents read only the first frame of an animated GIF. gifmate is an
+[MCP](https://modelcontextprotocol.io) server that hands them frames evenly spaced in time, plus a
+Claude Code plugin that draws GIFs in the chat and adds the `/gif` tray.
 
-It works with any MCP client: Claude Code, Codex, Cursor and others. Windows and
-macOS, Node 18 or later, no ffmpeg.
+## What works where
+
+| | Claude Code (VS Code, desktop) | Codex, Cursor, other MCP clients |
+|---|---|---|
+| Agent watches a GIF (file or URL) | yes | yes |
+| Agent searches GIPHY | yes | yes |
+| GIF plays inline in the chat | yes (plugin) | no: you get the local file path |
+| `/gif` tray to send a GIF | yes (plugin) | no |
+
+The inline GIFs and the tray use Claude Code *mods* (plugin hooks), an early-access feature: Claude Code
+asks once whether to turn them on. Without them the MCP tools still work everywhere.
 
 ## Install
 
-`gif_search` needs a free GIPHY API key from <https://developers.giphy.com>, set as
-`GIPHY_API_KEY`. `gif_view` needs nothing.
+You need Node 18 or later. Searching GIPHY needs a free API key from
+<https://developers.giphy.com> (Create an App, choose **API**); watching GIFs needs nothing.
 
-**Claude Code**
+**Claude Code**: inside Claude Code run
+
+```
+/plugin install gifmate --marketplace AntonioNoOne/gifmate
+```
+
+**Codex, Cursor and others**: clone the repository and point your client at the bundled server,
+which needs no `npm install`:
 
 ```sh
-claude mcp add gifmate --scope user -e GIPHY_API_KEY=your-key -- npx -y gifmate
+git clone https://github.com/AntonioNoOne/gifmate
+codex mcp add gifmate -- node /path/to/gifmate/dist/gifmate.mjs
 ```
-
-or as a plugin: `/plugin install gifmate --marketplace AntonioNoOne/gifmate`
-(it reads `GIPHY_API_KEY` from your environment).
-
-**Codex**
-
-```sh
-codex mcp add gifmate --env GIPHY_API_KEY=your-key -- npx -y gifmate
-```
-
-Codex asks before each MCP tool call. To let gifmate run without asking, add to
-`~/.codex/config.toml`:
-
-```toml
-[mcp_servers.gifmate]
-default_tools_approval_mode = "approve"
-```
-
-**Cursor, Windsurf and other clients**: add to the client's MCP settings:
 
 ```json
-{ "mcpServers": { "gifmate": { "command": "npx", "args": ["-y", "gifmate"], "env": { "GIPHY_API_KEY": "your-key" } } } }
+{ "mcpServers": { "gifmate": { "command": "node", "args": ["/path/to/gifmate/dist/gifmate.mjs"] } } }
 ```
+
+Codex asks before each MCP tool call; to let gifmate run without asking, add
+`default_tools_approval_mode = "approve"` under `[mcp_servers.gifmate]` in `~/.codex/config.toml`.
+
+**GIPHY key**: run once
+
+```sh
+node /path/to/gifmate/dist/gifmate.mjs setup
+```
+
+It saves the key in your user config (`%APPDATA%\gifmate\config.json` on Windows,
+`~/.config/gifmate/config.json` on macOS and Linux). A `GIPHY_API_KEY` environment variable works too and wins.
 
 ## Use
 
-- "What happens in this GIF? `C:\Users\me\Downloads\bug.gif`"
-- "Look at <https://example.com/demo.gif> and tell me when the button turns red."
-- "Tests are green, send me a celebration GIF."
+- `/gif` opens the tray above the prompt: type a search (English works best on GIPHY), pick one, press **Manda**.
+- `/gif cat applause` opens it with results already there.
+- "What happens in this GIF? `C:\Users\me\Downloads\bug.gif`": the agent watches it.
+- "Tests are green, send me a GIF": the agent searches GIPHY and sends one.
 
-Whether a GIF sent back shows animated depends on the client: chat panels that
-render markdown images show it; a plain terminal shows the link.
+## Privacy
+
+- Searches go to GIPHY, with your key.
+- When the agent watches a GIF, its frames become part of the conversation, so they reach your model
+  provider like any image you paste. The GIF file itself is not uploaded anywhere by gifmate.
+- Sent GIFs are kept in your temp folder (`gifmate/`) so the chat can draw them.
+- URLs pointing at your machine or local network (localhost, 10.x, 192.168.x, ...) are refused, downloads
+  stop at 20 MB and 15 seconds, and GIFs over 4096×4096 are not decoded.
 
 ## How it works
 
-The GIF is decoded in pure JavaScript ([omggif](https://github.com/deanm/omggif)),
-every frame is composited as a browser would draw it, then up to 12 frames (2 to 24
-with `max_frames`) are picked at even time intervals, first and last included, and
-returned as PNG images no larger than 384 px.
+The GIF is decoded in pure JavaScript ([omggif](https://github.com/deanm/omggif)) and every frame is
+composited as a browser would draw it. `gif_view` returns up to 12 frames (2–24 with `max_frames`) at even
+time intervals as PNG. For the chat, `gif_send` turns the GIF into an SVG that plays its frames with SMIL,
+because chat panels draw SVG as an image, and an image does not animate a GIF nested inside an SVG.
 
-Local files never leave your machine. Search queries go to GIPHY.
 Search results are powered by GIPHY.
 
 ## Develop
@@ -72,6 +88,7 @@ Search results are powered by GIPHY.
 ```sh
 npm install
 npm test
+npm run build   # refreshes dist/gifmate.mjs, the single-file server the plugin runs
 ```
 
 MIT license.

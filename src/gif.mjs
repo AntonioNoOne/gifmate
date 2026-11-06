@@ -1,18 +1,50 @@
 // Turn an animated GIF into a few still frames an agent can look at.
-import { readFile } from "node:fs/promises";
+import { lookup } from "node:dns/promises";
+import { readFile, stat } from "node:fs/promises";
+import { isIP } from "node:net";
 import { GifReader, GifWriter } from "omggif";
 import { PNG } from "pngjs";
 
 const MAX_BYTES = 20 * 1024 * 1024;
+const MAX_PIXELS = 4096 * 4096;
+
+// A URL in a prompt may come from anyone: never let it reach this machine or its network.
+const PRIVATE = [/^127\./, /^10\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./, /^0\./, /^::1$/, /^f[cd]/i, /^fe80/i, /^::ffff:(127|10|192\.168)\./i];
+
+async function assertPublic(url) {
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
+  if (host === "localhost" || addresses.some((a) => PRIVATE.some((re) => re.test(a)))) {
+    throw new Error(`refused: ${url.hostname} is a local or private address`);
+  }
+}
+
+async function download(source) {
+  let url = new URL(source);
+  for (let hop = 0; hop < 4; hop++) {
+    await assertPublic(url);
+    const res = await fetch(url, { headers: { "user-agent": "gifmate" }, redirect: "manual", signal: AbortSignal.timeout(15_000) });
+    if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
+      url = new URL(res.headers.get("location"), url); // each redirect is checked too
+      continue;
+    }
+    if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
+    if (Number(res.headers.get("content-length")) > MAX_BYTES) throw new Error("GIF larger than 20 MB");
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of res.body) {
+      size += chunk.length;
+      if (size > MAX_BYTES) throw new Error("GIF larger than 20 MB");
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  }
+  throw new Error("download failed: too many redirects");
+}
 
 export async function loadBytes(source) {
-  if (/^https?:\/\//i.test(source)) {
-    const res = await fetch(source, { headers: { "user-agent": "gifmate" } });
-    if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > MAX_BYTES) throw new Error("GIF larger than 20 MB");
-    return buf;
-  }
+  if (/^https?:\/\//i.test(source)) return download(source);
+  if ((await stat(source)).size > MAX_BYTES) throw new Error("GIF larger than 20 MB");
   return readFile(source);
 }
 
@@ -150,6 +182,7 @@ export function animatedSvg(bytes, { budget = 120_000 } = {}) {
 // Decode once, composite in order, keep only `maxFrames` frames evenly spaced in time.
 function keyFrames(bytes, maxFrames) {
   const reader = new GifReader(new Uint8Array(bytes));
+  if (reader.width * reader.height > MAX_PIXELS) throw new Error("GIF too large (over 4096x4096)");
   const n = reader.numFrames();
   const times = [];
   let t = 0;

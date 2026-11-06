@@ -3,16 +3,34 @@
   "version": "0.1.0",
   "description": "MCP server that lets coding agents (Claude Code, Codex, Cursor...) watch animated GIFs frame by frame and send GIFs back from GIPHY.",
   "type": "module",
-  "bin": { "gifmate": "src/server.mjs" },
-  "files": ["src"],
-  "scripts": { "test": "node --test" },
-  "engines": { "node": ">=18" },
+  "bin": {
+    "gifmate": "src/server.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "build": "esbuild src/server.mjs --bundle --minify --platform=node --format=esm --target=node18 --outfile=dist/gifmate.mjs --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "omggif": "^1.0.10",
     "pngjs": "^7.0.0",
     "zod": "^4.6.7"
   },
-  "keywords": ["mcp", "gif", "claude-code", "codex", "giphy"],
-  "license": "MIT"
+  "keywords": [
+    "mcp",
+    "gif",
+    "claude-code",
+    "codex",
+    "giphy"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "0.25.0"
+  }
 }
