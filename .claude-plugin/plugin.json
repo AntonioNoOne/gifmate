@@ -8,10 +8,7 @@
       "command": "node",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/src/server.mjs"
-      ],
-      "env": {
-        "GIPHY_API_KEY": "${GIPHY_API_KEY}"
-      }
+      ]
     }
   },
   "author": {

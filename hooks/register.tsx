@@ -35,6 +35,29 @@ async function svgOf($: any, path: string | undefined): Promise<string> {
   }
 }
 
+// One search, shared by `/gif <what>` and the tray's own search box.
+async function search($: any, query: string) {
+  let status = query ? `Cerco “${query}”…` : 'Scrivi qui sotto cosa cercare (in inglese funziona meglio) e premi Invio'
+  let picks: GifmatePick[] = []
+  await update($, picker, () => ({ isOpen: true, status, picks }))
+  if (!query) return
+  const tool = await toolNamed($, '__gif_search')
+  if (!tool) {
+    status = 'gifmate non è collegato in questa sessione.'
+  } else {
+    try {
+      const { text } = await $.tool.call({ tool, query, limit: 6, thumbs: true })
+      const body = String(text)
+      // results come as JSON; anything else is the server's own message (no results, no key)
+      picks = body.trimStart().startsWith('[') ? JSON.parse(body.split('\n\nPowered')[0]) : []
+      status = picks.length ? 'Powered by GIPHY' : `Nessuna GIF per “${query}”. In inglese GIPHY trova di più: prova “cat”`
+    } catch (err) {
+      status = `Ricerca non riuscita: ${String(err)}`
+    }
+  }
+  await update($, picker, () => ({ isOpen: true, status, picks }))
+}
+
 export const register: Register = on => {
   // Me -> you: play the GIF gif_send prepared (an SMIL SVG), under its tool row.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
@@ -89,46 +112,6 @@ export const register: Register = on => {
   // You -> me, the easy way: /gif <what> opens a GIPHY picker beside the chat.
   // /gif is a command file of the plugin (commands/gif.md), so menus list it; with the mod it opens
   // the tray instead of prompting the model.
-  // One search, shared by `/gif <what>` and the tray's own search box.
-  async function search($: any, query: string) {
-    let status = query ? `Cerco “${query}”…` : 'Scrivi qui sotto cosa cercare (in inglese funziona meglio) e premi Invio'
-    let picks: GifmatePick[] = []
-    await update($, picker, () => ({ isOpen: true, status, picks }))
-    if (!query) return
-    const tool = await toolNamed($, '__gif_search')
-    if (!tool) {
-      status = 'gifmate non è collegato in questa sessione.'
-    } else {
-      try {
-        const { text } = await $.tool.call({ tool, query, limit: 6, thumbs: true })
-        const body = String(text)
-        // results come as JSON; anything else is the server's own message (no results, no key)
-        picks = body.trimStart().startsWith('[') ? JSON.parse(body.split('\n\nPowered')[0]) : []
-        status = picks.length ? 'Powered by GIPHY' : `Nessuna GIF per “${query}”. In inglese GIPHY trova di più: prova “cat”`
-      } catch (err) {
-        status = `Ricerca non riuscita: ${String(err)}`
-      }
-    }
-    await update($, picker, () => ({ isOpen: true, status, picks }))
-  }
-
-  // VS Code runs the command file as a skill: open the tray, and leave the model one short line to say.
-  on('skill.prompt', async ($, e, next) => {
-    if (!/^(gifmate:)?gif$/.test(e.skill)) return next(e)
-    const query = /GIF about: (.*)/.exec(e.text)?.[1]?.trim() ?? ''
-    void search($, query)
-    return {
-      text: "The user opened gifmate's GIF picker above the prompt box. Reply with one short line in the user's language telling them to pick a GIF there and press Manda (or type a search in its box). Call no tool.",
-    }
-  })
-
-  // A command file runs as a prompt for the model: stop it on the way and open the tray instead.
-  // The menu may name it `gif` or `gifmate:gif`.
-  on('prompt.submit', async ($, e, next) => {
-    if (!e.command || !/^(gifmate:)?gif$/.test(e.command.name)) return next(e)
-    void search($, e.command.args.trim())
-    return { drop: 'gifmate: GIF tray opened' }
-  })
 
   // The picker sits above the prompt, like a chat app's GIF tray.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -192,7 +175,13 @@ export const register: Register = on => {
   })
 
   // You -> me: a GIF named in the prompt goes to gif_view, not to the image reader.
+  // One prompt.submit hook (the engine allows one per event without a matcher):
+  // /gif opens the tray instead of reaching the model; a GIF named in a prompt goes to gif_view.
   on('prompt.submit', ($, e, next) => {
+    if (e.command && /^(gifmate:)?gif$/.test(e.command.name)) {
+      void search($, e.command.args.trim())
+      return { drop: 'gifmate: GIF tray opened' }
+    }
     const refs = [...new Set(e.text.match(GIF_REF) ?? [])]
     const pasted = (e.attachments ?? []).filter(a => a.mediaType === 'image/gif')
     if (!refs.length && !pasted.length) return next(e)
