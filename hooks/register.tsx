@@ -87,22 +87,8 @@ export const register: Register = on => {
   })
 
   // You -> me, the easy way: /gif <what> opens a GIPHY picker beside the chat.
-  // Registered at start, and again on the first prompt after a /reload-plugins (which skips session.start).
-  let hasCommand = false
-  const registerCommand = async ($: any) => {
-    if (hasCommand) return
-    hasCommand = true
-    await $.command.register({ name: 'gif', description: 'Search GIPHY and send a GIF in the chat' })
-  }
-  on('session.start', async ($, e, next) => {
-    await registerCommand($)
-    return next(e)
-  })
-  on('prompt.submit', async ($, e, next) => {
-    await registerCommand($)
-    return next(e)
-  })
-
+  // /gif is a command file of the plugin (commands/gif.md), so menus list it; with the mod it opens
+  // the tray instead of prompting the model.
   // One search, shared by `/gif <what>` and the tray's own search box.
   async function search($: any, query: string) {
     let status = query ? `Cerco “${query}”…` : 'Scrivi qui sotto cosa cercare (in inglese funziona meglio) e premi Invio'
@@ -128,7 +114,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'gif' }, async ($, e) => {
     await search($, e.args.trim())
-    return {}
+    return { text: undefined }
   })
 
   // The picker sits above the prompt, like a chat app's GIF tray.
