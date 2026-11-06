@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { framesOf, loadBytes } from "./gif.mjs";
+import { animatedSvg, framesOf, loadBytes } from "./gif.mjs";
 import { searchGiphy } from "./giphy.mjs";
 
 const server = new McpServer({ name: "gifmate", version: "0.1.0" });
@@ -81,7 +81,16 @@ server.registerTool(
       await mkdir(dir, { recursive: true });
       const file = join(dir, createHash("sha1").update(bytes).digest("hex").slice(0, 12) + ".gif");
       await writeFile(file, bytes);
-      return { content: [{ type: "text", text: `gifmate-sent: ${file}\n${caption ?? ""}`.trim() }] };
+      const lines = [`gifmate-sent: ${file}`];
+      try {
+        const svgFile = file.replace(/\.gif$/, ".svg");
+        await writeFile(svgFile, animatedSvg(bytes).svg);
+        lines.push(`gifmate-svg: ${svgFile}`);
+      } catch {
+        // too big to play inline: the chat mod shows the file path instead
+      }
+      if (caption) lines.push(caption);
+      return { content: [{ type: "text", text: lines.join("\n") }] };
     } catch (err) {
       return fail(err);
     }

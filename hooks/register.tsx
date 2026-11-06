@@ -1,50 +1,46 @@
 import type { Register } from 'claude-code'
 
-// The SVG a surface draws may hold at most 131072 characters.
-const MAX_BASE64 = 120_000
-const SHOW_HEIGHT = 160
 const SENT = /gifmate-sent: (.+?\.gif)/i
+const SVG = /gifmate-svg: (.+?\.svg)/i
 const GIF_REF = /(?:https?:\/\/\S+?\.gif|(?:[A-Za-z]:)?[^\s"'<>|]*\.gif)(?=[\s"'),.]|$)/gi
 
-function gifSize(base64: string) {
-  const head = Uint8Array.fromBase64(base64.slice(0, 16))
-  return { width: head[6] | (head[7] << 8), height: head[8] | (head[9] << 8) }
-}
-
-function sentPath(output: unknown): string | undefined {
+// gif_send's text reaches us as a string or inside JSON (backslashes doubled).
+function pathFrom(output: unknown, re: RegExp): string | undefined {
   const text = typeof output === 'string' ? output : JSON.stringify(output ?? '')
-  const raw = SENT.exec(text)?.[1]
-  return raw?.replace(/\\\\/g, '\\')
+  return re.exec(text)?.[1]?.replace(/\\\\/g, '\\')
 }
 
 export const register: Register = on => {
-  // Me -> you: draw the GIF gif_send saved, under its tool row.
+  // Me -> you: play the GIF gif_send prepared (an SMIL SVG), under its tool row.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     const row = await next(e)
-    const path = /gif_send$/.test(e.props.tool) && !e.props.isErrored ? sentPath(e.props.output) : undefined
-    if (!path) return row
+    if (!/gif_send$/.test(e.props.tool) || e.props.isErrored) return row
+    const gif = pathFrom(e.props.output, SENT)
+    if (!gif) return row
 
     const { Box, Text } = $.ui.resolve(e)
-    const { base64 } = await $.fs.read(path, { as: 'bytes' })
-    if (base64.length > MAX_BASE64 || e.surface === 'terminal') {
+    const svgPath = pathFrom(e.props.output, SVG) ?? gif.replace(/\.gif$/i, '.svg')
+    let svg = ''
+    if (svgPath && e.surface !== 'terminal') {
+      try {
+        svg = await $.fs.read(svgPath)
+      } catch {
+        svg = ''
+      }
+    }
+    if (!svg) {
       return (
         <Box flexDirection="column">
           {row}
-          <Text dimColor>GIF: {path}</Text>
+          <Text dimColor>GIF: {gif}</Text>
         </Box>
       )
     }
-    const { width, height } = gifSize(base64)
-    const h = Math.min(SHOW_HEIGHT, height)
-    const w = Math.round((width * h) / height)
-    const source =
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${width} ${height}">` +
-      `<image href="data:image/gif;base64,${base64}" width="${width}" height="${height}"/></svg>`
     const { Svg } = $.ui.resolve(e) as { Svg: any }
     return (
       <Box flexDirection="column">
         {row}
-        <Svg source={source} alt="GIF" width={w} height={h} />
+        <Svg source={svg} alt="GIF" />
       </Box>
     )
   })

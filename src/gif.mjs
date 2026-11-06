@@ -75,6 +75,31 @@ function toPng(rgba, width, height, maxSide) {
   return PNG.sync.write(png).toString("base64");
 }
 
+// An SVG that plays the GIF with SMIL, for chat panels that draw SVG as an image
+// (an <img> does not animate a GIF nested inside an SVG). Fewer and smaller frames
+// until it fits `budget` characters.
+export function animatedSvg(bytes, { budget = 120_000 } = {}) {
+  for (const [count, side] of [[24, 200], [16, 180], [12, 160], [10, 140], [8, 120], [6, 100], [4, 90], [2, 80]]) {
+    const gif = framesOf(bytes, { maxFrames: count, maxSide: side });
+    const scale = Math.min(1, side / Math.max(gif.width, gif.height));
+    const w = Math.max(1, Math.round(gif.width * scale));
+    const h = Math.max(1, Math.round(gif.height * scale));
+    const dur = gif.duration || 1;
+    const images = gif.frames.map((f, i) => {
+      const start = f.time / dur;
+      const end = i + 1 < gif.frames.length ? gif.frames[i + 1].time / dur : 1;
+      return (
+        `<image width="${w}" height="${h}" visibility="hidden" href="data:image/png;base64,${f.png}">` +
+        `<animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" ` +
+        `keyTimes="0;${start.toFixed(4)};${end.toFixed(4)};1" dur="${dur.toFixed(2)}s" repeatCount="indefinite"/></image>`
+      );
+    });
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${images.join("")}</svg>`;
+    if (svg.length <= budget) return { svg, width: w, height: h, frames: gif.frames.length };
+  }
+  throw new Error("GIF too large to animate inline");
+}
+
 export function framesOf(bytes, { maxFrames = 12, maxSide = 384 } = {}) {
   const reader = new GifReader(new Uint8Array(bytes));
   const all = [...composite(reader)];
