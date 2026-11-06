@@ -23,7 +23,7 @@ if (process.argv[2] === "setup") {
   process.exit(0);
 }
 
-const server = new McpServer({ name: "gifmate", version: "0.1.0" }, { instructions: GIF_RULES });
+const server = new McpServer({ name: "gifmate", version: "0.2.0" }, { instructions: GIF_RULES });
 
 // Sent GIFs and previews live in the temp folder for the chat to draw; a day later nobody needs them.
 const DIR = join(tmpdir(), "gifmate");

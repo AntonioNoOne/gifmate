@@ -1,20 +1,23 @@
 {
   "name": "gifmate",
-  "version": "0.1.0",
-  "description": "MCP server that lets coding agents (Claude Code, Codex, Cursor...) watch animated GIFs frame by frame and send GIFs back from GIPHY.",
+  "version": "0.2.0",
+  "description": "Trade GIFs with your coding agent: it watches animated GIFs frame by frame and sends GIFs from GIPHY. MCP server for Claude Code, Codex, Cursor, VS Code, Gemini CLI; plus a Claude Code plugin with an in-chat GIF tray.",
   "type": "module",
   "bin": {
-    "gifmate": "src/server.mjs"
+    "gifmate": "dist/server.mjs"
   },
   "files": [
-    "src"
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "test": "node --test",
     "build": "esbuild src/server.mjs src/anim-worker.mjs --bundle --minify --platform=node --format=esm --target=node18 --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\""
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -32,5 +35,9 @@
   "license": "MIT",
   "devDependencies": {
     "esbuild": "0.25.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AntonioNoOne/gifmate"
   }
 }

@@ -1,5 +1,14 @@
 {
   "name": "gifmate",
-  "owner": { "name": "Antonio Arcodia" },
-  "plugins": [{ "name": "gifmate", "source": "./", "description": "Watch animated GIFs frame by frame and send GIFs back from GIPHY." }]
+  "owner": {
+    "name": "Antonio Arcodia"
+  },
+  "plugins": [
+    {
+      "name": "gifmate",
+      "source": "./",
+      "description": "Trade GIFs with Claude like with a teammate: a GIPHY tray in the chat, GIFs played inline, GIFs read as messages."
+    }
+  ],
+  "description": "gifmate: GIFs between you and your coding agent"
 }

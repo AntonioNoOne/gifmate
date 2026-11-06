@@ -1,7 +1,7 @@
 {
   "name": "gifmate",
-  "version": "0.1.0",
-  "description": "Watch animated GIFs frame by frame and send GIFs in the chat, from GIPHY.",
+  "version": "0.2.0",
+  "description": "Trade GIFs with Claude like with a teammate: a GIPHY tray in the chat (/gif), GIFs played inline, and GIFs read as messages.",
   "license": "MIT",
   "mcpServers": {
     "gifmate": {
