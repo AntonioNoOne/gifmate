@@ -103,18 +103,24 @@ async function search($: any, query: string) {
 
 // Search while typing: wait until the person pauses, so a free GIPHY key (100 searches an hour) lasts.
 // The wait follows the person's own typing pace (hooks/typing.ts, tested on fast to very slow typists).
-let typed = ''
+// Each keystroke (and Enter) bumps `keystroke`: only the last one's timer may search, even if the text
+// came back to an earlier value (abc → ab → abc).
+let keystroke = 0
 let lastKeyAt = 0
 const gaps: number[] = []
 async function searchWhileTyping($: any, value: string) {
+  const mine = ++keystroke
   const now: number = await $.clock.now()
   if (lastKeyAt) gaps.push(now - lastKeyAt)
   if (gaps.length > 6) gaps.shift()
   lastKeyAt = now
-  typed = value.trim()
-  const mine = typed
+  const text = value.trim()
   await $.clock.sleep(waitAfterTyping(gaps))
-  if (mine === typed && (mine.length >= MIN_LENGTH || !mine)) await search($, mine)
+  if (mine === keystroke && (text.length >= MIN_LENGTH || !text)) await search($, text)
+}
+async function searchNow($: any, value: string) {
+  keystroke++ // Enter: drop the pending typing timer
+  await search($, value.trim())
 }
 
 export const register: Register = on => {
@@ -248,7 +254,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" gap={1}>
-          <Input key="gif-query" placeholder="Cerca una GIF…" submitLabel="Cerca" autoFocus onInput={(q: string) => searchWhileTyping($, q)} onSubmit={(q: string) => search($, q.trim())} />
+          <Input key="gif-query" placeholder="Cerca una GIF…" submitLabel="Cerca" autoFocus onInput={(q: string) => searchWhileTyping($, q)} onSubmit={(q: string) => searchNow($, q)} />
           <Button key="gif-close" label="✕" plain dimColor role="dismiss" onPress={close} />
         </Box>
         <Text dimColor>{status}</Text>
@@ -296,15 +302,16 @@ export const register: Register = on => {
       if (inline[1].trim()) void $.prompt.fill({ text: inline[1].trim() + ' ', mode: 'replace' })
       return { drop: 'gifmate: GIF tray opened' }
     }
-    // An attached GIF leaves with the person's next message.
-    if (!e.command && !e.isMeta && e.origin?.kind !== 'plugin') {
-      let attached: GifmateAttached | null = null
-      await update($, picker, v => {
-        attached = v.attached
-        return { ...v, attached: null, isOpen: v.attached ? false : v.isOpen } // sent: the tray's job is done
-      })
-      if (attached) return next({ ...e, text: gifMessage(e.text.trim(), attached) })
+    // An attached GIF leaves with the person's next message; it leaves the tray only once the message went through
+    // (a hook below may still refuse it, and then the GIF stays attached).
+    const attached: GifmateAttached | null =
+      !e.command && !e.isMeta && e.origin?.kind !== 'plugin' ? (await read($, picker)).attached : null
+    const sent = async (ev: typeof e) => {
+      const result = await next(ev)
+      if (attached && !(result as { drop?: string })?.drop) await update($, picker, v => ({ ...v, attached: null, isOpen: false }))
+      return result
     }
+    if (attached) e = { ...e, text: gifMessage(e.text.trim(), attached) }
     // A GIF sent from the tray is a message, like in any chat: its meaning, not its pixels.
     const reply = /^([\s\S]*?)\n?GIF: (.*)\n(\S+\.gif)\s*$/.exec(e.text)
     if (reply) {
@@ -315,17 +322,17 @@ export const register: Register = on => {
         'Treat it as their message: read what they mean (GIFs are often ironic or a reaction to your last reply) and act on it, ' +
         'as a teammate would, in their language. Do not describe the GIF, and answer with words, not with a GIF of your own. ' +
         `Only if the title is not enough to get the meaning, glance at it with gifmate's gif_view on ${reply[3]} with max_frames 3.`
-      return next({ ...e, context: [...(e.context ?? []), note] })
+      return sent({ ...e, context: [...(e.context ?? []), note] })
     }
     const refs = [...new Set(e.text.match(GIF_REF) ?? [])]
     const pasted = (e.attachments ?? []).filter(a => a.mediaType === 'image/gif')
-    if (!refs.length && !pasted.length) return next(e)
+    if (!refs.length && !pasted.length) return sent(e)
     const notes = refs.map(
       r => `The user shared the GIF ${r}. Image readers show only its first frame: call gifmate's gif_view on it before answering.`,
     )
     if (pasted.length) {
       notes.push('The user pasted an animated GIF; you see only its first frame. Say so, and ask for its path or URL to watch it with gif_view.')
     }
-    return next({ ...e, context: [...(e.context ?? []), ...notes] })
+    return sent({ ...e, context: [...(e.context ?? []), ...notes] })
   })
 }

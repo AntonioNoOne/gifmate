@@ -1,50 +1,98 @@
 // Turn an animated GIF into a few still frames an agent can look at.
 import { lookup } from "node:dns/promises";
 import { readFile, stat } from "node:fs/promises";
+import http from "node:http";
+import https from "node:https";
 import { isIP } from "node:net";
 import { GifReader, GifWriter } from "omggif";
 import { PNG } from "pngjs";
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const MAX_PIXELS = 4096 * 4096;
+const MAX_FRAMES = 2000;
+const MAX_WORK = 400_000_000; // frames × pixels: about 6 s of a 640×360 GIF at 30 fps is 41 M
 
 // A URL in a prompt may come from anyone: never let it reach this machine or its network.
-const PRIVATE = [/^127\./, /^10\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./, /^0\./, /^::1$/, /^f[cd]/i, /^fe80/i, /^::ffff:(127|10|192\.168)\./i];
-
-// GIPHY serves from a few hosts: one DNS lookup a minute each, not one per preview.
-const resolved = new Map();
-async function addressesOf(host) {
-  const hit = resolved.get(host);
-  if (hit && Date.now() - hit.at < 60_000) return hit.addresses;
-  const addresses = (await lookup(host, { all: true })).map((a) => a.address);
-  resolved.set(host, { at: Date.now(), addresses });
-  return addresses;
-}
-
-async function assertPublic(url) {
-  const host = url.hostname.replace(/^\[|\]$/g, "");
-  const addresses = isIP(host) ? [host] : await addressesOf(host);
-  if (host === "localhost" || addresses.some((a) => PRIVATE.some((re) => re.test(a)))) {
-    throw new Error(`refused: ${url.hostname} is a local or private address`);
+export function isPrivateAddress(address) {
+  let a = address.toLowerCase();
+  // IPv4 written as IPv6, dotted (::ffff:10.0.0.1) or as URL parsers print it (::ffff:a00:1)
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(a);
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(a);
+  if (mapped) a = mapped[1];
+  else if (hex) {
+    const [hi, lo] = [parseInt(hex[1], 16), parseInt(hex[2], 16)];
+    a = [hi >> 8, hi & 255, lo >> 8, lo & 255].join(".");
   }
+  if (isIP(a) === 4) {
+    const [p, q] = a.split(".").map(Number);
+    return (
+      p === 0 || p === 10 || p === 127 || p >= 224 || // this host, private, loopback, multicast and reserved
+      (p === 100 && q >= 64 && q <= 127) || // carrier-grade NAT
+      (p === 169 && q === 254) || (p === 172 && q >= 16 && q <= 31) || (p === 192 && q === 168) ||
+      (p === 192 && q === 0) || (p === 198 && (q === 18 || q === 19)) // IETF and benchmark ranges
+    );
+  }
+  return a === "::" || a === "::1" || /^f[cd]/.test(a) || /^fe[89ab]/.test(a) || /^ff/.test(a) || /^64:ff9b:/.test(a);
 }
 
+// GIPHY serves from a few hosts: one DNS lookup a minute each, not one per preview. The check runs inside
+// the connection's own lookup, so the address checked is the address used (no DNS-rebinding window).
+const resolved = new Map();
+function safeLookup(host, options, callback) {
+  const done = (addresses) => {
+    const bad = addresses.find((x) => isPrivateAddress(x.address));
+    if (bad || host === "localhost") return callback(new Error(`refused: ${host} is a local or private address`));
+    if (options.all) return callback(null, addresses);
+    callback(null, addresses[0].address, addresses[0].family);
+  };
+  const hit = resolved.get(host);
+  if (hit && Date.now() - hit.at < 60_000) return done(hit.addresses);
+  lookup(host, { all: true }).then(
+    (addresses) => {
+      resolved.set(host, { at: Date.now(), addresses });
+      done(addresses);
+    },
+    (err) => callback(err),
+  );
+}
+
+function get(url, signal) {
+  return new Promise((resolve, reject) => {
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    if (isIP(host) && isPrivateAddress(host)) return reject(new Error(`refused: ${host} is a local or private address`));
+    const client = url.protocol === "https:" ? https : http;
+    const req = client.get(url, { headers: { "user-agent": "gifmate" }, lookup: safeLookup, signal }, resolve);
+    req.on("error", reject);
+  });
+}
+
+// One deadline for the whole download, redirects included.
 async function download(source, timeoutMs) {
+  const signal = AbortSignal.timeout(timeoutMs);
   let url = new URL(source);
   for (let hop = 0; hop < 4; hop++) {
-    await assertPublic(url);
-    const res = await fetch(url, { headers: { "user-agent": "gifmate" }, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
-    if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
-      url = new URL(res.headers.get("location"), url); // each redirect is checked too
+    const res = await get(url, signal);
+    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+      res.resume();
+      url = new URL(res.headers.location, url); // each redirect is checked too
       continue;
     }
-    if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
-    if (Number(res.headers.get("content-length")) > MAX_BYTES) throw new Error("GIF larger than 20 MB");
+    if (res.statusCode !== 200) {
+      res.resume();
+      throw new Error(`download failed: HTTP ${res.statusCode}`);
+    }
+    if (Number(res.headers["content-length"]) > MAX_BYTES) {
+      res.destroy();
+      throw new Error("GIF larger than 20 MB");
+    }
     const chunks = [];
     let size = 0;
-    for await (const chunk of res.body) {
+    for await (const chunk of res) {
       size += chunk.length;
-      if (size > MAX_BYTES) throw new Error("GIF larger than 20 MB");
+      if (size > MAX_BYTES) {
+        res.destroy();
+        throw new Error("GIF larger than 20 MB");
+      }
       chunks.push(chunk);
     }
     return Buffer.concat(chunks);
@@ -201,6 +249,8 @@ function keyFrames(bytes, maxFrames) {
   const reader = new GifReader(new Uint8Array(bytes));
   if (reader.width * reader.height > MAX_PIXELS) throw new Error("GIF too large (over 4096x4096)");
   const n = reader.numFrames();
+  // decoding composites every frame: cap the total work so a crafted GIF cannot stall the server
+  if (n > MAX_FRAMES || n * reader.width * reader.height > MAX_WORK) throw new Error("GIF too long to decode (too many frames)");
   const times = [];
   let t = 0;
   for (let i = 0; i < n; i++) {

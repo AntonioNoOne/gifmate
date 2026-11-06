@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { searchesFor, waitAfterTyping } from "../hooks/typing.ts";
+import { searchesFor, waitAfterTyping } from "../mod/typing.ts";
 
 // Keystrokes for a word typed at a steady pace, as [time, text so far].
 const typed = (word, gap, start = 0) => [...word].map((_, i) => [start + i * gap, word.slice(0, i + 1)]);

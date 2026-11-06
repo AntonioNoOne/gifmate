@@ -14,5 +14,6 @@
   "author": {
     "name": "Antonio Arcodia"
   },
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "hooks": "./mod/hooks.json"
 }

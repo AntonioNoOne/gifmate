@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "gifmate",
+  "version": "0.2.0",
+  "description": "Trade GIFs with your coding agent: it watches animated GIFs frame by frame and searches and sends GIFs from GIPHY.",
+  "extensions": {
+    "com.openai": {
+      "hooks": []
+    }
+  }
+}

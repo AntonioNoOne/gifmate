@@ -40,17 +40,30 @@ void readdir(DIR)
 
 // Animated SVGs are CPU work: a worker thread builds them, so the server keeps answering meanwhile
 // (on the main thread a search waited up to 2.6 s behind the previous search's previews).
-const worker = new Worker(new URL("./anim-worker.mjs", import.meta.url));
+// If the worker dies, the jobs waiting on it fail at once (instead of hanging) and the next one starts a new worker.
 const waiting = new Map();
 let jobs = 0;
-worker.on("message", ({ id, svg, error }) => {
-  const job = waiting.get(id);
-  waiting.delete(id);
-  if (error) job.reject(new Error(error));
-  else job.resolve(svg);
-});
+let worker = null;
+function startWorker() {
+  const w = new Worker(new URL("./anim-worker.mjs", import.meta.url));
+  w.on("message", ({ id, svg, error }) => {
+    const job = waiting.get(id);
+    waiting.delete(id);
+    if (error) job?.reject(new Error(error));
+    else job?.resolve(svg);
+  });
+  const fail = (err) => {
+    if (worker === w) worker = null;
+    for (const [, job] of waiting) job.reject(err instanceof Error ? err : new Error(`preview worker stopped (${err})`));
+    waiting.clear();
+  };
+  w.on("error", fail);
+  w.on("exit", (code) => fail(code));
+  return w;
+}
 const animate = (bytes, options) =>
   new Promise((resolve, reject) => {
+    worker ??= startWorker();
     const id = ++jobs;
     waiting.set(id, { resolve, reject });
     worker.postMessage({ id, bytes: new Uint8Array(bytes), options });
@@ -116,7 +129,7 @@ server.registerTool(
 server.registerTool(
   "gif_search",
   {
-    annotations: { readOnlyHint: true, openWorldHint: true },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }, // previews are written to the temp folder
     description:
       "Search GIPHY for a reaction GIF to send the user, then send it with gif_send on its `gif` URL. Follow gifmate's rules: only at a moment that earns it (a hard-won win, good news, a kickoff, a warm sign-off), never when something failed or the user is stressed, at most one per reply and not two replies in a row. Search the feeling in English, pick by title.",
     inputSchema: {

@@ -13,10 +13,10 @@ Claude Code plugin that draws GIFs in the chat and adds the `/gif` tray.
 
 ## What works where
 
-| | Claude Code (VS Code, desktop) | Codex, Cursor, other MCP clients |
+| | Claude Code | Codex, Cursor, VS Code, Gemini CLI |
 |---|---|---|
 | Agent watches a GIF (file or URL) | yes | yes |
-| Agent searches GIPHY | yes | yes |
+| Agent searches and picks GIFs, following the etiquette rules | yes | yes |
 | GIF plays inline in the chat | yes (plugin) | no: you get the local file path |
 | `/gif` tray to send a GIF | yes (plugin) | no |
 
@@ -25,29 +25,45 @@ asks once whether to turn them on. Without them the MCP tools still work everywh
 
 ## Install
 
-You need Node 18 or later. Searching GIPHY needs a free API key from
-<https://developers.giphy.com> (Create an App, choose **API**); watching GIFs needs nothing.
+You need **Node 20 or later** (Windows, macOS, Linux). Nothing else: the server in `dist/` is bundled and
+needs no `npm install`. Searching GIPHY needs a free API key from <https://developers.giphy.com>
+(Create an App, choose **API**); watching GIFs needs nothing.
 
-**Claude Code**: inside Claude Code run
+**Claude Code** (plugin: MCP server, `/gif` tray, inline GIFs)
 
 ```
-/plugin install gifmate --marketplace AntonioNoOne/gifmate
+/plugin marketplace add AntonioNoOne/gifmate
+/plugin install gifmate@gifmate
 ```
 
-**Codex, Cursor and others**: clone the repository and point your client at the bundled server,
-which needs no `npm install`:
+In a company that publishes it to its organization library: `/plugin install gifmate@claudeai-organization-library`.
+
+**Codex CLI** (plugin: MCP server; the Claude mod is not loaded)
+
+```sh
+codex plugin marketplace add AntonioNoOne/gifmate
+codex plugin add gifmate@gifmate
+```
+
+Codex asks before each MCP tool call. To let gifmate's tools run without asking, add to `~/.codex/config.toml`:
+
+```toml
+[plugins."gifmate@gifmate".mcp_servers.gifmate]
+default_tools_approval_mode = "approve"
+```
+
+**Gemini CLI** (extension): `gemini extensions install https://github.com/AntonioNoOne/gifmate`
+
+**Cursor, VS Code and other MCP clients**: clone the repository and point the client at the bundled server
+(on Windows write paths with `/`):
 
 ```sh
 git clone https://github.com/AntonioNoOne/gifmate
-codex mcp add gifmate -- node /path/to/gifmate/dist/server.mjs
 ```
 
-```json
-{ "mcpServers": { "gifmate": { "command": "node", "args": ["/path/to/gifmate/dist/server.mjs"] } } }
-```
-
-Codex asks before each MCP tool call; to let gifmate run without asking, add
-`default_tools_approval_mode = "approve"` under `[mcp_servers.gifmate]` in `~/.codex/config.toml`.
+- Cursor, `~/.cursor/mcp.json`: `{ "mcpServers": { "gifmate": { "command": "node", "args": ["/path/to/gifmate/dist/server.mjs"] } } }`
+- VS Code, user `mcp.json`: `{ "servers": { "gifmate": { "type": "stdio", "command": "node", "args": ["/path/to/gifmate/dist/server.mjs"] } } }`
+- Codex without the plugin: `codex mcp add gifmate -- node /path/to/gifmate/dist/server.mjs`
 
 **GIPHY key**: run once
 
@@ -73,12 +89,15 @@ production keys with higher limits on request.
 
 ## Privacy
 
-- Searches go to GIPHY, with your key.
-- When the agent watches a GIF, its frames become part of the conversation, so they reach your model
-  provider like any image you paste. The GIF file itself is not uploaded anywhere by gifmate.
+- Searches go to GIPHY, with your key (in the request, as GIPHY's API requires).
+- The key is stored in plain text in your user config folder; protect it like any other local token.
+- `gif_view` and `gif_send` can read any GIF file your user can read. When the agent watches one, its
+  frames become part of the conversation and reach your model provider like any image you paste: keep your
+  client's tool approvals on if that matters. gifmate itself uploads no file anywhere.
 - Sent GIFs and previews are kept in your temp folder (`gifmate/`) so the chat can draw them, and removed after a day.
-- URLs pointing at your machine or local network (localhost, 10.x, 192.168.x, ...) are refused, downloads
-  stop at 20 MB and 15 seconds, and GIFs over 4096×4096 are not decoded.
+- URLs pointing at your machine or local network (localhost, 10.x, 192.168.x, IPv6 local ranges, ...) are
+  refused, checked on the address actually connected to; downloads
+  stop at 20 MB and 15 seconds in all (redirects included), and GIFs over 4096×4096 or 2000 frames are not decoded.
 
 ## How it works
 

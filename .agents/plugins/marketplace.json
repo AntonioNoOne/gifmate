@@ -1,0 +1,12 @@
+{
+  "name": "gifmate",
+  "interface": { "displayName": "gifmate" },
+  "plugins": [
+    {
+      "name": "gifmate",
+      "source": { "source": "local", "path": "./" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Developer Tools"
+    }
+  ]
+}

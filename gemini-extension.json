@@ -1,0 +1,12 @@
+{
+  "name": "gifmate",
+  "version": "0.2.0",
+  "description": "Trade GIFs with your coding agent: watch animated GIFs frame by frame, search and send GIFs from GIPHY.",
+  "mcpServers": {
+    "gifmate": {
+      "command": "node",
+      "args": ["${extensionPath}${/}dist${/}server.mjs"],
+      "cwd": "${extensionPath}"
+    }
+  }
+}
