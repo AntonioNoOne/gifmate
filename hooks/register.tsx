@@ -11,7 +11,6 @@ function pathFrom(output: unknown, re: RegExp): string | undefined {
   return re.exec(text)?.[1]?.replace(/\\\\/g, '\\')
 }
 
-const PANE = 'gifmate-picker'
 const THUMB = 96
 
 type Pick = { title: string; gif: string; thumb?: string }
@@ -19,6 +18,7 @@ type Pick = { title: string; gif: string; thumb?: string }
 let query = ''
 let status = ''
 let picks: Pick[] = []
+let isOpen = false
 
 // The gifmate tools by suffix: the prefix depends on how gifmate was installed.
 async function toolNamed($: any, suffix: string): Promise<string | undefined> {
@@ -87,7 +87,8 @@ export const register: Register = on => {
     query = e.args.trim()
     picks = []
     status = query ? `Cerco “${query}”…` : 'Scrivi cosa cercare: /gif gatto che applaude'
-    await $.ui.open({ id: PANE, title: 'GIF' })
+    isOpen = true
+    $.ui.invalidate('ui.render')
     if (!query) return {}
     const search = await toolNamed($, '__gif_search')
     if (!search) {
@@ -99,14 +100,21 @@ export const register: Register = on => {
         status = picks.length ? 'Powered by GIPHY' : `Nessuna GIF per “${query}”.`
       } catch (err) {
         status = `Ricerca non riuscita: ${String(err)}`
+        $.ui.toast(status)
       }
     }
     $.ui.invalidate('ui.render')
     return {}
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+  // The picker sits above the prompt, like a chat app's GIF tray.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (!isOpen) return next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
+    const close = () => {
+      isOpen = false
+      $.ui.invalidate('ui.render')
+    }
     const { Svg } = $.ui.resolve(e) as { Svg?: any }
     const send = async (p: Pick) => {
       status = 'Invio…'
@@ -114,7 +122,7 @@ export const register: Register = on => {
       const sendTool = await toolNamed($, '__gif_send')
       const { text } = sendTool ? await $.tool.call({ tool: sendTool, source: p.gif } as any) : { text: '' }
       const file = pathFrom(text, SENT)
-      await $.ui.close({ id: PANE })
+      close()
       if (file) await $.prompt.submit({ text: `GIF: ${p.title}\n${file}`, asUser: true })
     }
     const cards = await Promise.all(
@@ -130,7 +138,10 @@ export const register: Register = on => {
     )
     return (
       <Box flexDirection="column" gap={1}>
-        <Text dimColor>{status}</Text>
+        <Box flexDirection="row" gap={1}>
+          <Text dimColor>{status}</Text>
+          <Button key="gif-close" label="Chiudi" onPress={close} />
+        </Box>
         <Box flexDirection="row" flexWrap="wrap" gap={1}>
           {cards}
         </Box>
