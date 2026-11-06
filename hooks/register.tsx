@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-const SHOW_HEIGHT = 140
+const SHOW_HEIGHT = 180
 const SENT = /gifmate-sent: (.+?\.gif)/i
 const SVG = /gifmate-svg: (.+?\.svg)/i
 const GIF_REF = /(?:https?:\/\/\S+?\.gif|(?:[A-Za-z]:)?[^\s"'<>|]*\.gif)(?=[\s"'),.]|$)/gi
@@ -42,10 +42,13 @@ export const register: Register = on => {
     const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(svg)
     const [w, ht] = size ? [Number(size[1]), Number(size[2])] : [SHOW_HEIGHT, SHOW_HEIGHT]
     const shown = Math.min(1, SHOW_HEIGHT / ht)
+    const gifOnly = <Svg source={svg} alt="GIF" width={Math.round(w * shown)} height={Math.round(ht * shown)} />
+    // like a teammate's message: just the GIF; the full transcript (ctrl+o) keeps the tool row
+    if (!e.props.isExpanded) return gifOnly
     return (
       <Box flexDirection="column">
         {row}
-        <Svg source={svg} alt="GIF" width={Math.round(w * shown)} height={Math.round(ht * shown)} />
+        {gifOnly}
       </Box>
     )
   })
