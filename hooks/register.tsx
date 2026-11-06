@@ -112,6 +112,16 @@ export const register: Register = on => {
     await update($, picker, () => ({ isOpen: true, status, picks }))
   }
 
+  // VS Code runs the command file as a skill: open the tray, and leave the model one short line to say.
+  on('skill.prompt', async ($, e, next) => {
+    if (!/^(gifmate:)?gif$/.test(e.skill)) return next(e)
+    const query = /GIF about: (.*)/.exec(e.text)?.[1]?.trim() ?? ''
+    void search($, query)
+    return {
+      text: "The user opened gifmate's GIF picker above the prompt box. Reply with one short line in the user's language telling them to pick a GIF there and press Manda (or type a search in its box). Call no tool.",
+    }
+  })
+
   // A command file runs as a prompt for the model: stop it on the way and open the tray instead.
   // The menu may name it `gif` or `gifmate:gif`.
   on('prompt.submit', async ($, e, next) => {
