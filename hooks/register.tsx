@@ -112,11 +112,12 @@ export const register: Register = on => {
     await update($, picker, () => ({ isOpen: true, status, picks }))
   }
 
-  // the menu may run it as `gif` or namespaced as `gifmate:gif`
-  on('command.run', async ($, e, next) => {
-    if (!/^(gifmate:)?gif$/.test(e.command)) return next(e)
-    await search($, e.args.trim())
-    return { text: undefined }
+  // A command file runs as a prompt for the model: stop it on the way and open the tray instead.
+  // The menu may name it `gif` or `gifmate:gif`.
+  on('prompt.submit', async ($, e, next) => {
+    if (!e.command || !/^(gifmate:)?gif$/.test(e.command.name)) return next(e)
+    void search($, e.command.args.trim())
+    return { drop: 'gifmate: GIF tray opened' }
   })
 
   // The picker sits above the prompt, like a chat app's GIF tray.
