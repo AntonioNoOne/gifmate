@@ -1,13 +1,20 @@
 {
   "name": "gifmate",
   "version": "0.1.0",
-  "description": "Watch animated GIFs frame by frame and send GIFs back from GIPHY.",
+  "description": "Watch animated GIFs frame by frame and send GIFs in the chat, from GIPHY.",
   "license": "MIT",
   "mcpServers": {
     "gifmate": {
-      "command": "npx",
-      "args": ["-y", "gifmate@0.1.0"],
-      "env": { "GIPHY_API_KEY": "${GIPHY_API_KEY}" }
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/src/server.mjs"
+      ],
+      "env": {
+        "GIPHY_API_KEY": "${GIPHY_API_KEY}"
+      }
     }
+  },
+  "author": {
+    "name": "Antonio Arcodia"
   }
 }

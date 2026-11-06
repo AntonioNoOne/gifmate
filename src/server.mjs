@@ -3,6 +3,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { framesOf, loadBytes } from "./gif.mjs";
 import { searchGiphy } from "./giphy.mjs";
 
@@ -40,7 +44,7 @@ server.registerTool(
   "gif_search",
   {
     description:
-      "Search GIPHY for a reaction GIF to send the user. Each result has a `markdown` line: put it in your reply to show the GIF. Pick by title, or preview with gif_view on `small`. Send at most one per reply, and only when it fits the moment.",
+      "Search GIPHY for a reaction GIF to send the user. Pick one by title (or preview it with gif_view on `small`), then send it with gif_send on its `small` URL. At most one per reply, and only when it fits the moment.",
     inputSchema: {
       query: z.string().describe("What the GIF should show, in English works best"),
       limit: z.number().int().min(1).max(12).default(6),
@@ -53,6 +57,31 @@ server.registerTool(
         ? JSON.stringify(results, null, 2) + "\n\nPowered by GIPHY"
         : `No GIF found for "${query}".`;
       return { content: [{ type: "text", text }] };
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
+server.registerTool(
+  "gif_send",
+  {
+    description:
+      "Send a GIF to the user in the chat. Pass the `small` URL of a gif_search result (or any GIF URL or local path). Clients with the gifmate chat mod draw it inline; others get a local file to open.",
+    inputSchema: {
+      source: z.string().describe("GIF URL or local path"),
+      caption: z.string().optional().describe("Short caption shown with the GIF"),
+    },
+  },
+  async ({ source, caption }) => {
+    try {
+      const bytes = await loadBytes(source);
+      framesOf(bytes, { maxFrames: 2 }); // refuse anything that is not a GIF
+      const dir = join(tmpdir(), "gifmate");
+      await mkdir(dir, { recursive: true });
+      const file = join(dir, createHash("sha1").update(bytes).digest("hex").slice(0, 12) + ".gif");
+      await writeFile(file, bytes);
+      return { content: [{ type: "text", text: `gifmate-sent: ${file}\n${caption ?? ""}`.trim() }] };
     } catch (err) {
       return fail(err);
     }

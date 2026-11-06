@@ -16,7 +16,6 @@ export async function searchGiphy(query, { limit = 6, rating = "pg", key = proce
       page: g.url,
       gif,
       small: g.images.fixed_height_small?.url || gif,
-      markdown: `![${title.replace(/[[\]]/g, "")}](${gif})`,
     };
   });
 }
