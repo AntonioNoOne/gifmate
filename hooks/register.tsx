@@ -1,4 +1,7 @@
+import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
+
+import type { GifmatePick, GifmatePicker } from '../types'
 
 const SHOW_HEIGHT = 180
 const SENT = /gifmate-sent: (.+?\.gif)/i
@@ -11,14 +14,11 @@ function pathFrom(output: unknown, re: RegExp): string | undefined {
   return re.exec(text)?.[1]?.replace(/\\\\/g, '\\')
 }
 
-const THUMB = 96
+const THUMB = 90
 
-type Pick = { title: string; gif: string; thumb?: string }
-// The picker lives for one search; a reload simply closes it.
-let query = ''
-let status = ''
-let picks: Pick[] = []
-let isOpen = false
+// In the engine's state, so the tray redraws the moment a search lands.
+const CLOSED: GifmatePicker = { isOpen: false, status: '', picks: [] }
+const picker = atom({ plugin: 'gifmate', key: 'picker' } as const, CLOSED, { shape: 'picker-1' })
 
 // The gifmate tools by suffix: the prefix depends on how gifmate was installed.
 async function toolNamed($: any, suffix: string): Promise<string | undefined> {
@@ -93,11 +93,10 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'gif' }, async ($, e) => {
-    query = e.args.trim()
-    picks = []
-    status = query ? `Cerco “${query}”…` : 'Scrivi cosa cercare: /gif gatto che applaude'
-    isOpen = true
-    $.ui.invalidate('ui.render')
+    const query = e.args.trim()
+    let status = query ? `Cerco “${query}”…` : 'Scrivi cosa cercare, in inglese: /gif cat applause'
+    let picks: GifmatePick[] = []
+    await update($, picker, () => ({ isOpen: true, status, picks }))
     if (!query) return {}
     const search = await toolNamed($, '__gif_search')
     if (!search) {
@@ -116,34 +115,33 @@ export const register: Register = on => {
         $.ui.toast(status)
       }
     }
-    $.ui.invalidate('ui.render')
+    await update($, picker, () => ({ isOpen: true, status, picks }))
     return {}
   })
 
   // The picker sits above the prompt, like a chat app's GIF tray.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const { isOpen, status, picks } = await read($, picker)
     if (!isOpen) return next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
-    const close = () => {
-      isOpen = false
-      $.ui.invalidate('ui.render')
-    }
+    const close = () => update($, picker, () => CLOSED)
     const { Svg } = $.ui.resolve(e) as { Svg?: any }
-    const send = async (p: Pick) => {
-      status = 'Invio…'
-      $.ui.invalidate('ui.render')
+    const send = async (p: GifmatePick) => {
+      await update($, picker, v => ({ ...v, status: 'Invio…' }))
       const sendTool = await toolNamed($, '__gif_send')
       const { text } = sendTool ? await $.tool.call({ tool: sendTool, source: p.gif } as any) : { text: '' }
       const file = pathFrom(text, SENT)
-      close()
+      await close()
       if (file) await $.prompt.submit({ text: `GIF: ${p.title}\n${file}`, asUser: true })
     }
     const cards = await Promise.all(
       picks.map(async (p, i) => {
         const thumb = Svg ? await svgOf($, p.thumb) : ''
+        const size = /<svg[^>]*width="(\d+)" height="(\d+)"/.exec(thumb)
+        const w = size ? Math.round((Number(size[1]) * THUMB) / Number(size[2])) : THUMB
         return (
-          <Box flexDirection="column" width={THUMB + 8}>
-            {thumb ? <Svg source={thumb} alt={p.title} width={THUMB} height={THUMB} /> : <Text>{p.title}</Text>}
+          <Box flexDirection="column" alignItems="center">
+            {thumb ? <Svg source={thumb} alt={p.title} width={w} height={THUMB} /> : <Text>{p.title}</Text>}
             <Button key={`send-${i}`} label="Manda" onPress={() => send(p)} />
           </Box>
         )
@@ -155,7 +153,7 @@ export const register: Register = on => {
           <Text dimColor>{status}</Text>
           <Button key="gif-close" label="Chiudi" onPress={close} />
         </Box>
-        <Box flexDirection="row" flexWrap="wrap" gap={1}>
+        <Box flexDirection="row" gap={1}>
           {cards}
         </Box>
       </Box>

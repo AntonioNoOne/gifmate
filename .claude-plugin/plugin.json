@@ -16,5 +16,6 @@
   },
   "author": {
     "name": "Antonio Arcodia"
-  }
+  },
+  "types": "./types/index.d.ts"
 }
