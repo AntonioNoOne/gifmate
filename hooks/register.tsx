@@ -112,7 +112,9 @@ export const register: Register = on => {
     await update($, picker, () => ({ isOpen: true, status, picks }))
   }
 
-  on('command.run', { command: 'gif' }, async ($, e) => {
+  // the menu may run it as `gif` or namespaced as `gifmate:gif`
+  on('command.run', async ($, e, next) => {
+    if (!/^(gifmate:)?gif$/.test(e.command)) return next(e)
     await search($, e.args.trim())
     return { text: undefined }
   })
