@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { GifmateAttached, GifmatePick, GifmatePicker } from '../types'
+import { MIN_LENGTH, waitAfterTyping } from './typing'
 
 const SHOW_HEIGHT = 180
 
@@ -101,12 +102,19 @@ async function search($: any, query: string) {
 }
 
 // Search while typing: wait until the person pauses, so a free GIPHY key (100 searches an hour) lasts.
+// The wait follows the person's own typing pace (hooks/typing.ts, tested on fast to very slow typists).
 let typed = ''
+let lastKeyAt = 0
+const gaps: number[] = []
 async function searchWhileTyping($: any, value: string) {
+  const now: number = await $.clock.now()
+  if (lastKeyAt) gaps.push(now - lastKeyAt)
+  if (gaps.length > 6) gaps.shift()
+  lastKeyAt = now
   typed = value.trim()
   const mine = typed
-  await $.clock.sleep(300)
-  if (mine === typed && (mine.length >= 2 || !mine)) await search($, mine)
+  await $.clock.sleep(waitAfterTyping(gaps))
+  if (mine === typed && (mine.length >= MIN_LENGTH || !mine)) await search($, mine)
 }
 
 export const register: Register = on => {
