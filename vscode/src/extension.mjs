@@ -88,6 +88,8 @@ class Picker {
       // So the GIF also goes to the clipboard as a file, for Ctrl+V into the message.
       const copied = await copyFile(file);
       const commands = await vscode.commands.getCommands(true);
+      // A pasted GIF reaches the model as its first frame only (often black): the attached file carries the title.
+      if (commands.includes(ATTACH)) await vscode.commands.executeCommand(ATTACH, vscode.Uri.file(file));
       if (copied && commands.includes(OPEN_CODEX)) {
         // as if the person pressed Ctrl+V in the Codex composer: focus it, then paste
         await vscode.commands.executeCommand(OPEN_CODEX);
@@ -95,7 +97,6 @@ class Picker {
         await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
         this.post({ type: "status", text: "Incollata nella chat di Codex (se non la vedi: Ctrl+V)" });
       } else if (commands.includes(ATTACH)) {
-        await vscode.commands.executeCommand(ATTACH, vscode.Uri.file(file));
         this.post({ type: "status", text: "Allegata alla chat di Codex" });
       } else {
         if (!copied) await vscode.env.clipboard.writeText(file);
