@@ -141,7 +141,7 @@ server.registerTool(
   {
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }, // previews are written to the temp folder
     description:
-      "Search GIPHY for a reaction GIF to send the user, then send it with gif_send on its `gif` URL. Follow gifmate's rules: only at a moment that earns it (a hard-won win, good news, a kickoff, a warm sign-off), never when something failed or the user is stressed, at most one per reply and not two replies in a row. Search the feeling in English, pick by title.",
+      "Search GIPHY for a reaction GIF to send the user, then send it with gif_send on its `gif` URL. Follow gifmate's rules: only at a moment that earns it (a hard-won win, good news, a kickoff, a warm sign-off), never when something failed or the user is stressed, at most one per reply and not two replies in a row. Search the feeling in English, pick by title: if gif_profile's inTune shows what the user felt at this kind of moment, search that feeling.",
     inputSchema: {
       query: z.string().describe("The feeling to show, in English or Italian (Italian reaction words are translated). Empty: what is trending."),
       limit: z.number().int().min(1).max(12).default(6),
@@ -255,10 +255,11 @@ server.registerTool(
   {
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description:
-      "Write to the user's local GIF reaction diary, so you get to know them. Call it: after the user reacts to one of your GIFs (kind reaction: a GIF back or a clear yes/no is strong, 'ahah' or an emoji medium, silence or a topic change weak and never negative); when they tell you a preference about GIFs or humour (kind lesson, in their words, short); when they send you a GIF (kind user_gif, with its title and what it meant); when you missed a moment (kind missed, with the moment): they say a GIF would have fit, or they send one at a moment that was yours to mark (a win, a fix, a task done) - their GIF is their mood, so yours would have landed. Labels only: never copy the conversation.",
+      "Write to the user's local GIF reaction diary, so you get to know them. Call it: after the user reacts to one of your GIFs (kind reaction: a GIF back or a clear yes/no is strong, 'ahah' or an emoji medium, silence or a topic change weak and never negative); when they tell you a preference about GIFs or humour (kind lesson, in their words, short); when they send you a GIF (kind user_gif): your last message made them feel it, so it shows how to be in tune with them - record what that message was (moment) and the feeling their GIF shows (feeling); next time you mark that kind of moment, that is the GIF to send them first. When they say a GIF would have fit: kind missed, with the moment. Labels only: never copy the conversation.",
     inputSchema: {
       kind: z.enum(["reaction", "lesson", "user_gif", "missed"]),
-      moment: z.enum(MOMENTS).optional().describe("The moment the reaction refers to"),
+      moment: z.enum(MOMENTS).optional().describe("The moment the note refers to; for user_gif: what your previous message was"),
+      feeling: z.string().max(40).optional().describe("user_gif: the feeling their GIF shows, 1-3 English words ('lets go', 'facepalm', 'relief')"),
       outcome: z.enum(["positive", "negative", "neutral"]).optional(),
       strength: z.enum(["strong", "medium", "weak"]).optional(),
       gif: z.string().optional().describe("GIF title"),

@@ -49,7 +49,7 @@ export function profile(rows, now = new Date()) {
     const m = (byMoment[r.moment ?? "?"] ??= { positive: 0, negative: 0, neutral: 0 });
     m[r.outcome] = (m[r.outcome] ?? 0) + 1;
   }
-  const clear = [...reactions.filter((r) => r.strength !== "weak"), ...rows.filter((r) => r.kind === "missed")];
+  const clear = [...reactions.filter((r) => r.strength !== "weak"), ...rows.filter((r) => r.kind === "missed" || r.kind === "user_gif")];
   const ready =
     sent.length >= SOLO.sent &&
     new Set(sent.map((r) => day(r.t))).size >= SOLO.days &&
@@ -66,12 +66,26 @@ export function profile(rows, now = new Date()) {
     calibrationDue: mode === "taratura" && sent.length % 3 === 0, // ask on the 1st, 4th, 7th... GIF
     firstEver: sent.length === 0,
     reactionsByMoment: byMoment,
-    // moments where the user wanted a GIF and got none: dare more there
+    // in tune: what the user felt (their own GIF) after each kind of message of yours; send that feeling first next time
+    inTune: tune(rows),
     missedByMoment: rows.filter((r) => r.kind === "missed").reduce((m, r) => ({ ...m, [r.moment ?? "?"]: (m[r.moment ?? "?"] ?? 0) + 1 }), {}),
     lessons: rows.filter((r) => r.kind === "lesson").slice(-20).map((r) => r.note),
     overused: [...titles].filter(([, n]) => n >= 3).map(([t]) => t),
     recentReactions: reactions.slice(-5).map((r) => ({ moment: r.moment, outcome: r.outcome, strength: r.strength })),
   };
+}
+
+// moment -> feelings their GIFs showed, most frequent first: { bug_fixed: ["lets go (2)", "relief (1)"] }
+function tune(rows) {
+  const by = {};
+  for (const r of rows) {
+    if (r.kind !== "user_gif" || !r.feeling) continue;
+    const m = (by[r.moment ?? "?"] ??= {});
+    m[r.feeling] = (m[r.feeling] ?? 0) + 1;
+  }
+  return Object.fromEntries(
+    Object.entries(by).map(([moment, f]) => [moment, Object.entries(f).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} (${n})`)]),
+  );
 }
 
 // May the agent send a GIF now? null = yes, else the reason in one line.

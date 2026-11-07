@@ -36,6 +36,11 @@ test("taratura asks on the 1st, 4th, 7th GIF; switches to solo only with enough 
   assert.equal(profile([...missed, at("2026-11-07T13:00:00Z", { kind: "mode", mode: "solo" })]).mode, "solo");
 });
 
+test("in tune: the user's own GIFs tell which feeling each kind of moment gives them", () => {
+  const rows = ["lets go", "relief", "lets go"].map((feeling) => at("2026-11-07T10:00:00Z", { kind: "user_gif", moment: "bug_fixed", feeling }));
+  assert.deepEqual(profile(rows).inTune, { bug_fixed: ["lets go (2)", "relief (1)"] });
+});
+
 test("the diary keeps labels short and forgets on request", async () => {
   const file = join(await mkdtemp(join(tmpdir(), "gifmate-")), "diario.jsonl");
   await note({ kind: "lesson", note: "x".repeat(500) }, file);
