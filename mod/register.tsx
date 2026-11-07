@@ -359,9 +359,18 @@ export const register: Register = on => {
     else if (!e.command && !e.isMeta && e.origin?.kind !== 'plugin') {
       const first = (e.attachments ?? []).find(a => a.mediaType === 'image/gif' && a.id)
       const kept = first ? await keepPasted($, first.id as string) : null
-      // rewritten in place, not dropped and sent again: a plugin's prompt waits until the session is idle
-      // (a paste during a running turn was lost that way, 2026-11-07)
-      if (kept) e = { ...e, text: gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept) }
+      // The chat draws a typed prompt as typed (a small pasted thumbnail), a plugin's prompt by its text (the GIF
+      // card). So when the session is idle the paste is dropped and sent again as a GIF message, as Send does.
+      // Mid-turn (e.turnId) a plugin's prompt would wait for idle, and a paste was lost that way (2026-11-07):
+      // then the prompt is rewritten in place, drawn small but delivered at once.
+      if (kept) {
+        const text = gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept)
+        if (!e.turnId) {
+          void $.prompt.submit({ text, asUser: true })
+          return { drop: 'gifmate: pasted GIF sent as a GIF message' }
+        }
+        e = { ...e, text }
+      }
     }
     // A GIF sent from the tray is a message, like in any chat: its meaning, not its pixels.
     const reply = /^([\s\S]*?)\n?GIF: (.*)\n(\S+\.gif)\s*$/.exec(e.text)
