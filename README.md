@@ -36,7 +36,7 @@ Prefer doing it by hand? See [Manual install](#manual-install).
 |---|---|---|---|
 | Agent watches a GIF (file or URL) | ✓ | ✓ | ✓ |
 | Agent sends GIFs at the right moments | ✓ plays inline | ✓ as a local image in the chat | ✓ where the chat draws local images, else a link |
-| You send a GIF | `/gif` tray in the chat | GIF panel beside the chat (VS Code-family editors) | `/gif cat` shows a numbered gallery, you answer with a number (a `/gif` skill ships for agents that read skills, like Antigravity's) |
+| You send a GIF | `/gif` tray in the chat | GIF panel beside the chat (VS Code-family editors; also for Antigravity's agent) | `/gif cat` shows a numbered gallery, you answer with a number (a `/gif` skill ships for agents that read skills, like Antigravity's) |
 | Agent-to-agent handoffs with a GIF | ✓ plays inline | ✓ | ✓ where local images are drawn |
 | Reaction diary, calibrate / quiet modes | ✓ | ✓ | ✓ |
 
@@ -51,8 +51,9 @@ once to turn on; without them the tools still work. Tested on Windows; macOS is 
 - **➤ Send** sends a GIF now. **📎 Attach** keeps it for your next message: write, press Enter, both go together.
 - `deploy done /gif lets go`: `/gif` anywhere in a sentence keeps your words and opens the tray on the rest.
 
-**In Codex inside VS Code, Cursor or Antigravity**: the **GIF** icon in the activity bar opens the panel.
-Search, click a GIF: it is pasted into the Codex chat, animated. (Codex shows the model one frame of a
+**In VS Code, Cursor or Antigravity**: the **GIF** icon in the activity bar opens the panel. Choose where
+GIFs go (**Send to**: Codex, Antigravity's agent, or the clipboard), search, click a GIF: it is pasted into that
+chat, animated. (Codex shows the model one frame of a
 pasted GIF, so the panel puts the GIF's middle frame first: the model sees the moment, you see the animation.)
 
 **Anywhere**: "What happens in this GIF? `~/Downloads/bug.gif`" and the agent watches it frame by frame.

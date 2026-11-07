@@ -1,5 +1,5 @@
-// gifmate panel: a GIPHY tray beside the coding agent. Pick a GIF and it is attached to the Codex chat,
-// named after its title, so the agent reads it as your message (gifmate's rules).
+// gifmate panel: a GIPHY tray beside the coding agent. Pick a GIF and it is pasted into the chat you chose
+// (Codex, Antigravity's agent), animated, with its middle frame first so the model sees the moment.
 import * as vscode from "vscode";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,10 +11,18 @@ import { loadBytes, withCover } from "../../src/gif.mjs";
 import { note } from "../../src/diary.mjs";
 import { MIN_LENGTH, waitAfterTyping } from "../../mod/typing.ts";
 
-const ATTACH = "chatgpt.addFileToThread"; // the Codex extension's "Add File to Codex Chat"
-const OPEN_CODEX = "chatgpt.openSidebar"; // focuses the Codex chat
+// The chats a GIF can go to: the command that brings each one's message box into focus.
+// Found in the editors themselves (2026-11-07): the Codex extension, Antigravity's agent panel (Ctrl+L).
+const CHATS = [
+  { id: "codex", label: "Codex", focus: "chatgpt.openSidebar" },
+  { id: "antigravity", label: "Antigravity agent", focus: "antigravity.openChatView" },
+  { id: "clipboard", label: "Clipboard only (Ctrl+V anywhere)" },
+];
 
 class Picker {
+  constructor(state) {
+    this.state = state; // remembers the chosen chat
+  }
   results = [];
   keystroke = 0;
   lastKeyAt = 0;
@@ -27,6 +35,7 @@ class Picker {
     view.webview.options = { enableScripts: true };
     view.webview.html = page(nonce);
     view.webview.onDidReceiveMessage((m) => this.onMessage(m));
+    void this.offerChats();
     this.search(""); // trending, so the panel is never empty
   }
 
@@ -34,7 +43,20 @@ class Picker {
     this.view?.webview.postMessage(message);
   }
 
+  // only the chats this editor has; the last one chosen, or the first found
+  async offerChats() {
+    const commands = new Set(await vscode.commands.getCommands(true));
+    this.chats = CHATS.filter((c) => !c.focus || commands.has(c.focus));
+    const saved = this.state.get("gifmate.chat");
+    this.chat = this.chats.find((c) => c.id === saved) ?? this.chats[0];
+    this.post({ type: "chats", items: this.chats.map(({ id, label }) => ({ id, label })), selected: this.chat.id });
+  }
+
   async onMessage(m) {
+    if (m.type === "chat") {
+      this.chat = this.chats.find((c) => c.id === m.id) ?? this.chat;
+      return this.state.update("gifmate.chat", this.chat.id);
+    }
     if (m.type === "typed") return this.typed(m.text);
     if (m.type === "enter") {
       this.keystroke++; // Enter drops the pending typing timer
@@ -91,22 +113,19 @@ class Picker {
       } catch {}
       await writeFile(file, covered);
       void note({ kind: "picked", client: "gifmate-panel", gif: result.title.slice(0, 80) }).catch(() => {});
-      // Codex draws an attached file as a name chip only; a pasted image file it draws as an image.
-      // So the GIF also goes to the clipboard as a file, for Ctrl+V into the message.
+      // A chat draws an attached file as a name chip, a pasted image file as an image: so the GIF goes to the
+      // clipboard as a file, then into the chosen chat as if the person pressed Ctrl+V there.
       const copied = await copyFile(file);
-      const commands = await vscode.commands.getCommands(true);
-      if (copied && commands.includes(OPEN_CODEX)) {
-        // as if the person pressed Ctrl+V in the Codex composer: focus it, then paste
-        await vscode.commands.executeCommand(OPEN_CODEX);
+      if (!copied) {
+        await vscode.env.clipboard.writeText(file);
+        this.post({ type: "status", text: "GIF path copied: paste it in the chat" });
+      } else if (this.chat?.focus) {
+        await vscode.commands.executeCommand(this.chat.focus);
         await new Promise((r) => setTimeout(r, 400));
         await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
-        this.post({ type: "status", text: "Pasted in the Codex chat (not there? press Ctrl+V)" });
-      } else if (commands.includes(ATTACH)) {
-        await vscode.commands.executeCommand(ATTACH, vscode.Uri.file(file));
-        this.post({ type: "status", text: "Attached to the Codex chat" });
+        this.post({ type: "status", text: `Pasted in the ${this.chat.label} chat (not there? press Ctrl+V)` });
       } else {
-        if (!copied) await vscode.env.clipboard.writeText(file);
-        this.post({ type: "status", text: copied ? "GIF copied: press Ctrl+V in the chat" : "GIF path copied: paste it in the chat" });
+        this.post({ type: "status", text: "GIF copied: press Ctrl+V in any chat" });
       }
     } catch (err) {
       this.post({ type: "status", text: `Could not send it: ${String(err.message || err)}` });
@@ -137,16 +156,26 @@ function page(nonce) {
   #grid { display: flex; flex-wrap: wrap; gap: 6px; }
   #grid img { height: 100px; border-radius: 6px; cursor: pointer; transition: transform .1s, outline-color .1s; outline: 2px solid transparent; }
   #grid img:hover { transform: scale(1.04); outline-color: var(--vscode-focusBorder); }
+  #to { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 11px; opacity: .85; }
+  select { flex: 1; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground);
+           border: 1px solid var(--vscode-dropdown-border, transparent); border-radius: 4px; padding: 2px 4px; }
 </style></head><body>
+<label id="to">Send to <select id="chat"></select></label>
 <input id="q" placeholder="Search a GIF…" autofocus>
 <div id="status"></div><div id="grid"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const q = document.getElementById('q'), grid = document.getElementById('grid'), status = document.getElementById('status');
+  const chat = document.getElementById('chat');
+  chat.addEventListener('change', () => vscode.postMessage({ type: 'chat', id: chat.value }));
   q.addEventListener('input', () => vscode.postMessage({ type: 'typed', text: q.value }));
   q.addEventListener('keydown', (e) => { if (e.key === 'Enter') vscode.postMessage({ type: 'enter', text: q.value }); });
   window.addEventListener('message', ({ data }) => {
     if (data.type === 'status') status.textContent = data.text;
+    if (data.type === 'chats') {
+      chat.replaceChildren(...data.items.map(({ id, label }) => Object.assign(document.createElement('option'), { value: id, textContent: label })));
+      chat.value = data.selected;
+    }
     if (data.type === 'results') {
       status.textContent = data.status;
       grid.replaceChildren(...data.items.map((item, index) => {
@@ -161,7 +190,7 @@ function page(nonce) {
 }
 
 export function activate(context) {
-  const picker = new Picker();
+  const picker = new Picker(context.globalState);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("gifmate.picker", picker, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.commands.registerCommand("gifmate.open", () => vscode.commands.executeCommand("gifmate.picker.focus")),
