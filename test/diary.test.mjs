@@ -41,6 +41,16 @@ test("in tune: the user's own GIFs tell which feeling each kind of moment gives 
   assert.deepEqual(profile(rows).inTune, { bug_fixed: ["lets go (2)", "relief (1)"] });
 });
 
+test("the same moment is not the same situation: effort and cause keep them apart", () => {
+  const rows = [
+    at("2026-11-07T10:00:00Z", { kind: "user_gif", moment: "bug_fixed", effort: "days", cause: "external", feeling: "finally" }),
+    at("2026-11-07T11:00:00Z", { kind: "user_gif", moment: "bug_fixed", effort: "trivial", cause: "agent", feeling: "facepalm" }),
+  ];
+  assert.deepEqual(profile(rows).inTune, { "bug_fixed/days/external": ["finally (1)"], "bug_fixed/trivial/agent": ["facepalm (1)"] });
+  assert.match(gate(profile([]), "bug_fixed", { effort: "trivial", cause: "agent" }), /No GIF/);
+  assert.equal(gate(profile([]), "bug_fixed", { effort: "days", cause: "external" }), null);
+});
+
 test("the diary keeps labels short and forgets on request", async () => {
   const file = join(await mkdtemp(join(tmpdir(), "gifmate-")), "diario.jsonl");
   await note({ kind: "lesson", note: "x".repeat(500) }, file);

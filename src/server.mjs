@@ -12,7 +12,7 @@ import { Worker } from "node:worker_threads";
 import { framesOf, loadBytes, stillSvg } from "./gif.mjs";
 import { searchGiphy } from "./giphy.mjs";
 import { GIF_RULES } from "./rules.mjs";
-import { MOMENTS, diaryPath, forget, gate, note, profile, readDiary } from "./diary.mjs";
+import { CAUSES, EFFORTS, MOMENTS, diaryPath, forget, gate, note, profile, readDiary } from "./diary.mjs";
 
 if (process.argv[2] === "setup") {
   const { createInterface } = await import("node:readline/promises");
@@ -199,22 +199,24 @@ server.registerTool(
   {
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     description:
-      "Send a GIF to the user in the chat. Pass the `gif` URL of a gif_search result (or any GIF URL or local path) and the moment it marks. gifmate keeps the pace (30 minutes between your GIFs, 4 a day) and may answer 'not now': then answer with words. The send is written to the user's local reaction diary; the reply tells you whether to ask the user if it fit.",
+      "Send a GIF to the user in the chat. Pass the `gif` URL of a gif_search result (or any GIF URL or local path) and the moment it marks, with how hard it was and whose problem it was: the same moment is not the same moment (a trivial slip of yours, fixed, is no win to celebrate; a bug that hunted you both for days is). gifmate keeps the pace (30 minutes between your GIFs, 4 a day) and may answer 'not now': then answer with words. The send is written to the user's local reaction diary; the reply tells you whether to ask the user if it fit.",
     inputSchema: {
       source: z.string().describe("GIF URL or local path"),
       moment: z.enum(MOMENTS).describe("What the GIF marks: asked = the user asked you for one; banter = answering their playful GIF"),
+      effort: z.enum(EFFORTS).optional().describe("How hard it was: a quick fix is not a hunt that took hours or days"),
+      cause: z.enum(CAUSES).optional().describe("Whose problem it was: agent = a slip of yours, external = a library, a service, the platform"),
       title: z.string().optional().describe("The GIF's title (from gif_search)"),
       caption: z.string().optional().describe("Short caption shown with the GIF"),
     },
   },
-  async ({ source, moment, title, caption }) => {
+  async ({ source, moment, effort, cause, title, caption }) => {
     try {
       const rows = await readDiary();
       const before = profile(rows);
-      const refused = gate(before, moment);
+      const refused = gate(before, moment, { effort, cause });
       if (refused) return { content: [{ type: "text", text: refused }] };
       const { file, svgFile } = await saveGif(await loadBytes(source));
-      await note({ kind: "sent", client: clientName(), moment, gif: title || caption || source });
+      await note({ kind: "sent", client: clientName(), moment, effort, cause, gif: title || caption || source });
       const after = [];
       if (before.firstEver) {
         after.push(
@@ -259,6 +261,8 @@ server.registerTool(
     inputSchema: {
       kind: z.enum(["reaction", "lesson", "user_gif", "missed"]),
       moment: z.enum(MOMENTS).optional().describe("The moment the note refers to; for user_gif: what your previous message was"),
+      effort: z.enum(EFFORTS).optional().describe("How hard that moment was (trivial, normal, hours, days)"),
+      cause: z.enum(CAUSES).optional().describe("Whose problem it was"),
       feeling: z.string().max(40).optional().describe("user_gif: the feeling their GIF shows, 1-3 English words ('lets go', 'facepalm', 'relief')"),
       outcome: z.enum(["positive", "negative", "neutral"]).optional(),
       strength: z.enum(["strong", "medium", "weak"]).optional(),
