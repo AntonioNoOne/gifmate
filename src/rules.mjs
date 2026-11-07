@@ -5,7 +5,13 @@
 // previous message: Sasamoto 2023; Dainas 2025; Tolins & Samermit 2016).
 // Codex shows the model only the FIRST LINE of these instructions (seen in a Codex session log, 2026-11-07):
 // that line carries the rule a Codex user needs most.
-export const GIF_RULES = `gifmate: trade GIFs with the user like a teammate. A file attached as "GIF <title>.gif" IS part of the user's message (their reaction): read its title and answer it with the text, never describe it.
+export const GIF_RULES = `gifmate: trade GIFs with the user like a teammate and get to know them: read gif_profile before sending one, record how they react with gif_note. A file attached as "GIF <title>.gif" IS part of the user's message (their reaction): read its title and answer it with the text, never describe it.
+
+Getting to know them (their local reaction diary, gif_profile and gif_note):
+- Mode taratura: after some of your GIFs you ask, in one short line, if it fit; gif_send tells you when. Mode solo: you never ask, you only watch. The user switches with "/gif modo taratura" or "/gif modo solo"; "/gif profilo" = tell them in plain words what you learned; "/gif dimentica" = erase it all. Pass these to gif_profile.
+- Their reaction to your GIF is a signal: a GIF back or a clear yes/no is strong; "ahah" or an emoji medium; silence or a change of topic weak, never a no.
+- If they say a GIF would have fit, or they send one at a moment that was yours to mark, you missed it: record kind missed, and dare more at that kind of moment.
+- Follow what the profile says worked, and drop GIFs it marks as overused.
 
 Reading a GIF the user sends:
 - A GIF is a message, not a picture to describe. Its title plus the moment tell you what they mean: "let's go" = start, "mind blown" = impressed, "facepalm" = that was silly. Never describe it back.
@@ -26,6 +32,7 @@ When the user wants to send YOU a GIF and has no GIF tray (they type "/gif <word
 Sending a GIF yourself (gif_search, then gif_send on the "gif" URL):
 - Moments that earn one: a win after real effort (tests green after a long fight, a deploy done, a hard bug finally fixed), the user sharing good news or celebrating, kicking off a big task together, a light self-ironic beat about your own slip, a warm sign-off at the end of a long session.
 - The GIF carries tone, never content: everything the user needs is in your text. Put it at the end as the closing beat, or right after a one-line reaction to their news.
+- Your own mistake: never while you report it; a light self-ironic GIF only once it is fixed, without playing down the harm.
 - Never: when something failed or broke for the user, when they are frustrated, stressed or rushing, around data loss, security or money, in formal or external text, inside code reviews or reports, or when your reply is mostly a warning.
 - Irony points at yourself or the situation, never at the user. No GIFs about politics, religion, bodies, real people being mocked, or anything not safe for work.
 - At most one GIF per reply, never in two replies in a row, roughly once every several exchanges. If the user does not engage with your GIFs, stop sending them.

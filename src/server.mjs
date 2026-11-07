@@ -12,6 +12,7 @@ import { Worker } from "node:worker_threads";
 import { framesOf, loadBytes, stillSvg } from "./gif.mjs";
 import { searchGiphy } from "./giphy.mjs";
 import { GIF_RULES } from "./rules.mjs";
+import { MOMENTS, diaryPath, forget, gate, note, profile, readDiary } from "./diary.mjs";
 
 if (process.argv[2] === "setup") {
   const { createInterface } = await import("node:readline/promises");
@@ -103,7 +104,8 @@ let searches = 0;
 const later = (job, search) => (queue = queue.then(() => (search === searches ? job() : undefined)).catch(() => {}));
 
 // Claude Code presents itself as "claude-code", Codex as "codex-mcp-client" (checked 2026-11-07).
-const isClaude = () => /claude/i.test(server.server.getClientVersion()?.name ?? "");
+const clientName = () => server.server.getClientVersion()?.name ?? "unknown";
+const isClaude = () => /claude/i.test(clientName());
 
 const fail = (err) => ({ isError: true, content: [{ type: "text", text: String(err.message || err) }] });
 
@@ -197,34 +199,97 @@ server.registerTool(
   {
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     description:
-      "Send a GIF to the user in the chat. Pass the `gif` URL of a gif_search result (or any GIF URL or local path). Clients with the gifmate chat mod draw it inline; others get a local file to open.",
+      "Send a GIF to the user in the chat. Pass the `gif` URL of a gif_search result (or any GIF URL or local path) and the moment it marks. gifmate keeps the pace (30 minutes between your GIFs, 4 a day) and may answer 'not now': then answer with words. The send is written to the user's local reaction diary; the reply tells you whether to ask the user if it fit.",
     inputSchema: {
       source: z.string().describe("GIF URL or local path"),
+      moment: z.enum(MOMENTS).describe("What the GIF marks: asked = the user asked you for one; banter = answering their playful GIF"),
+      title: z.string().optional().describe("The GIF's title (from gif_search)"),
       caption: z.string().optional().describe("Short caption shown with the GIF"),
     },
   },
-  async ({ source, caption }) => {
+  async ({ source, moment, title, caption }) => {
     try {
+      const rows = await readDiary();
+      const before = profile(rows);
+      const refused = gate(before, moment);
+      if (refused) return { content: [{ type: "text", text: refused }] };
       const { file, svgFile } = await saveGif(await loadBytes(source));
+      await note({ kind: "sent", client: clientName(), moment, gif: title || caption || source });
+      const after = [];
+      if (before.firstEver) {
+        after.push(
+          "First GIF with this user: after it, ask in one short message two setup questions (GIFs also after your own mistakes, once fixed? which humour: light, ironic, none?) and record each answer with gif_note kind lesson.",
+        );
+      } else if (before.calibrationDue) {
+        after.push("Calibration: end your reply with one short line asking if the GIF fit (👍/👎); record the answer with gif_note kind reaction.");
+      }
+      if (before.mode === "taratura" && profile(await readDiary()).readyForSolo) {
+        await note({ kind: "mode", mode: "solo", note: "auto: enough reactions" });
+        after.push("You know this user well enough now: say once, in one line, that from now on you stop asking and only watch their reactions (they can switch back with /gif modo taratura).");
+      }
+      const guide = after.length ? `\n${after.join("\n")}` : "";
       // Claude Code with the gifmate mod draws the GIF from these lines. Other clients (Codex, Cursor, ...)
       // have no mod: they get a markdown image to put in the reply, which their chat may draw or show as a link.
       if (isClaude()) {
         const lines = [`gifmate-sent: ${file}`];
         if (svgFile) lines.push(`gifmate-svg: ${svgFile}`);
         if (caption) lines.push(caption);
-        return { content: [{ type: "text", text: lines.join("\n") }] };
+        return { content: [{ type: "text", text: lines.join("\n") + guide }] };
       }
       // the local copy, not the GIPHY URL: Codex's chat blocks remote images but draws local files (checked 2026-11-07)
       const url = pathToFileURL(file).href;
       const image = `![${(caption || "GIF").replace(/[[\]]/g, "")}](${url})`;
       return {
         content: [
-          { type: "text", text: `GIF ready. Put this line in your reply, on its own, so the user sees it:\n${image}\nSaved locally at ${file}.` },
+          { type: "text", text: `GIF ready. Put this line in your reply, on its own, so the user sees it:\n${image}\nSaved locally at ${file}.${guide}` },
         ],
       };
     } catch (err) {
       return fail(err);
     }
+  },
+);
+
+server.registerTool(
+  "gif_note",
+  {
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    description:
+      "Write to the user's local GIF reaction diary, so you get to know them. Call it: after the user reacts to one of your GIFs (kind reaction: a GIF back or a clear yes/no is strong, 'ahah' or an emoji medium, silence or a topic change weak and never negative); when they tell you a preference about GIFs or humour (kind lesson, in their words, short); when they send you a GIF (kind user_gif, with its title and what it meant); when you missed a moment (kind missed, with the moment): they say a GIF would have fit, or they send one at a moment that was yours to mark (a win, a fix, a task done) - their GIF is their mood, so yours would have landed. Labels only: never copy the conversation.",
+    inputSchema: {
+      kind: z.enum(["reaction", "lesson", "user_gif", "missed"]),
+      moment: z.enum(MOMENTS).optional().describe("The moment the reaction refers to"),
+      outcome: z.enum(["positive", "negative", "neutral"]).optional(),
+      strength: z.enum(["strong", "medium", "weak"]).optional(),
+      gif: z.string().optional().describe("GIF title"),
+      note: z.string().max(140).optional().describe("A few words: a preference, or what their GIF meant"),
+    },
+  },
+  async (entry) => {
+    await note({ ...entry, client: clientName() });
+    return { content: [{ type: "text", text: "Noted." }] };
+  },
+);
+
+server.registerTool(
+  "gif_profile",
+  {
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    description:
+      "What you know about how GIFs land with this user, from their local reaction diary: mode (taratura = you still ask if a GIF fit; solo = you only watch reactions, never ask), today's count and pace, what worked per moment, their stated preferences, GIFs already overused. Read it before choosing a GIF to send. Also the user's commands: '/gif modo taratura' or '/gif modo solo' (set mode), '/gif profilo' (show them, in plain words, what you learned), '/gif dimentica' (forget = true, erases the diary).",
+    inputSchema: {
+      mode: z.enum(["taratura", "solo"]).optional().describe("Set the mode (the user's command)"),
+      forget: z.boolean().optional().describe("Erase the whole diary (the user's command /gif dimentica)"),
+    },
+  },
+  async ({ mode, forget: erase }) => {
+    if (erase) {
+      await forget();
+      return { content: [{ type: "text", text: "Diary erased: you start from zero, in taratura mode." }] };
+    }
+    if (mode) await note({ kind: "mode", mode, note: "set by the user" });
+    const p = profile(await readDiary());
+    return { content: [{ type: "text", text: `${JSON.stringify(p, null, 2)}\n\nDiary: ${diaryPath()}` }] };
   },
 );
 

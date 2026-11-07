@@ -291,7 +291,14 @@ export const register: Register = on => {
   // /gif opens the tray instead of reaching the model; a GIF named in a prompt goes to gif_view.
   on('prompt.submit', async ($, e, next) => {
     if (e.command && /^(gifmate:)?gif$/.test(e.command.name)) {
-      void search($, e.command.args.trim())
+      const args = e.command.args.trim()
+      // /gif modo|profilo|dimentica: commands for the reaction diary, answered by the agent with gif_profile
+      if (/^(modo|profilo|dimentica)\b/i.test(args)) {
+        // a command's text cannot be rewritten: drop it and send the request as a message (as Invia does)
+        void $.prompt.submit({ text: `gifmate ${args}: call gif_profile for it and answer in one or two lines.`, asUser: true })
+        return { drop: `gifmate: ${args}` }
+      }
+      void search($, args)
       return { drop: 'gifmate: GIF tray opened' }
     }
     // `/gif` inside a sentence ("deploy done /gif lets go"): give the words back to the prompt box and open

@@ -92,6 +92,20 @@ It saves the key in your user config (`%APPDATA%\gifmate\config.json` on Windows
 - The agent sends GIFs on its own only when the moment earns one (a hard-won win, good news, a kickoff),
   never when something broke; a GIF you send is read as a message, not described back.
 
+### It gets to know you
+
+Every GIF you trade goes into a small local **reaction diary**: the moment (task done, bug fixed...), the GIF's
+title, how it landed. From it the agent learns when GIFs work with you, which humour you like, which GIFs it
+overused, and where it missed a moment (you said "a GIF fit here", or you sent one where it should have).
+
+- **Taratura** (the start): after some of its GIFs the agent asks, in one line, if it fit.
+- **Solo GIF**: once it has enough clear signal (5 GIFs over 3 days, 3 clear reactions, no recent "no") it
+  says so once and stops asking: it only watches how you react.
+- `/gif modo taratura` · `/gif modo solo` switch at any time; `/gif profilo` tells you what it learned;
+  `/gif dimentica` erases it all.
+- The pace is kept by gifmate, not by the agent's goodwill: 30 minutes between its GIFs, 4 a day
+  (a GIF you asked for, or a reply to your playful one, is always allowed).
+
 A free GIPHY key allows 100 searches an hour; repeated searches are remembered for 10 minutes. GIPHY offers
 production keys with higher limits on request.
 
@@ -102,6 +116,8 @@ production keys with higher limits on request.
 - `gif_view` and `gif_send` can read any GIF file your user can read. When the agent watches one, its
   frames become part of the conversation and reach your model provider like any image you paste: keep your
   client's tool approvals on if that matters. gifmate itself uploads no file anywhere.
+- The reaction diary is one file next to the key (`diario.jsonl`): labels only (moment, GIF title, outcome,
+  a note of at most 140 characters), never the conversation. It never leaves your machine; `/gif dimentica` deletes it.
 - Sent GIFs and previews are kept in your temp folder (`gifmate/`) so the chat can draw them, and removed after a day.
 - URLs pointing at your machine or local network (localhost, 10.x, 192.168.x, IPv6 local ranges, ...) are
   refused, checked on the address actually connected to; downloads
