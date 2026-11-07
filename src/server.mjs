@@ -21,7 +21,7 @@ if (process.argv[2] === "init" || process.argv[2] === "setup") {
   process.exit(0);
 }
 
-const server = new McpServer({ name: "gifmate", version: "0.3.8" }, { instructions: GIF_RULES });
+const server = new McpServer({ name: "gifmate", version: "0.3.9" }, { instructions: GIF_RULES });
 
 // Sent GIFs and previews live in the temp folder for the chat to draw; a day later nobody needs them.
 const DIR = join(tmpdir(), "gifmate");
@@ -119,7 +119,7 @@ async function recentPaste() {
       }
     }
   }
-  return best ? loadBytes(best.file) : null;
+  return best ? { bytes: await loadBytes(best.file), file: best.file } : null;
 }
 
 // what the diary keeps of a GIF: its title, never where it came from
@@ -321,11 +321,13 @@ server.registerTool(
   },
   async ({ source, data, recent_paste, title }) => {
     try {
-      const bytes = data ? Buffer.from(data, "base64") : recent_paste ? await recentPaste() : source ? await loadBytes(source) : null;
+      const pasted = recent_paste ? await recentPaste() : null;
+      const bytes = data ? Buffer.from(data, "base64") : pasted ? pasted.bytes : source ? await loadBytes(source) : null;
       if (!bytes) throw new Error("No GIF: give source, data or recent_paste.");
       const { file } = await saveGif(bytes);
       await note({ kind: "picked", client: clientName(), gif: label(title) });
-      return { content: [{ type: "text", text: `gifmate-sent: ${file}` }] };
+      const from = pasted ? `\ngifmate-pasted: ${pasted.file}` : "";
+      return { content: [{ type: "text", text: `gifmate-sent: ${file}${from}` }] };
     } catch (err) {
       return fail(err);
     }

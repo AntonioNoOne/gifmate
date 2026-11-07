@@ -16,6 +16,10 @@ function sizedGif(Svg: any, svg: string, maxHeight = SHOW_HEIGHT, alt = 'GIF') {
 }
 const SENT = /gifmate-sent: (.+?\.gif)/i
 const SVG = /gifmate-svg: (.+?\.svg)/i
+const PASTED = /gifmate-pasted: (.+?\.gif)/i
+const IMAGE_LINE = /\[Image: source: ([^\]]+)\]/i
+// the engine's image path, the same however it is written
+const pasteKey = (path: string) => path.trim().replace(/\//g, '\\').toLowerCase()
 const GIF_REF = /(?:https?:\/\/\S+?\.gif|(?:[A-Za-z]:)?[^\s"'<>|]*\.gif)(?=[\s"'),.]|$)/gi
 
 // gif_send's text reaches us as a string or inside JSON (backslashes doubled).
@@ -34,8 +38,14 @@ const picker = atom({ plugin: 'gifmate', key: 'picker' } as const, CLOSED, { sha
 const gifMessage = (words: string, a: GifmateAttached) => `${words ? words + '\n' : ''}GIF: ${a.title}\n${a.file}`
 
 // A pasted GIF's bytes (read in slices), kept by gifmate's gif_pick: null if it is not a GIF or cannot be read.
-async function keepPasted($: any, id: string): Promise<GifmateAttached | null> {
+async function keepPasted($: any, id: string): Promise<(GifmateAttached & { from?: string }) | null> {
   try {
+    const tool = await toolNamed($, '__gif_pick')
+    if (!tool) return null
+    // the engine saves every pasted image of the session; gifmate takes the newest GIF and says which it was
+    const saved = await $.tool.call({ tool, recent_paste: true, title: 'pasted GIF' } as any)
+    const savedFile = pathFrom(saved.text, SENT)
+    if (savedFile) return { title: 'pasted GIF (no title: look at it)', file: savedFile, from: pathFrom(saved.text, PASTED) }
     let base64 = ''
     let offset: number | undefined
     do {
@@ -44,11 +54,8 @@ async function keepPasted($: any, id: string): Promise<GifmateAttached | null> {
       base64 += part.base64
       offset = part.next
     } while (offset !== undefined && base64.length < 28_000_000)
-    const tool = await toolNamed($, '__gif_pick')
-    if (!tool) return null
-    // a big GIF reaches hooks as a resized still: then gifmate takes the original from the session's pasted images
-    const args = base64.startsWith('R0lGOD') ? { data: base64 } : { recent_paste: true }
-    const { text } = await $.tool.call({ tool, ...args, title: 'pasted GIF' } as any)
+    if (!base64.startsWith('R0lGOD')) return null // a big GIF reaches hooks as a resized still
+    const { text } = await $.tool.call({ tool, data: base64, title: 'pasted GIF' } as any)
     const file = pathFrom(text, SENT)
     return file ? { title: 'pasted GIF (no title: look at it)', file } : null
   } catch {
@@ -220,32 +227,8 @@ export const register: Register = on => {
   // The picker sits above the prompt, like a chat app's GIF tray.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
    try {
-    const { isOpen, status, picks, attached, pending } = await read($, picker)
+    const { isOpen, status, picks, attached } = await read($, picker)
     const { Box, Text, Button, Input } = $.ui.resolve(e)
-    // A pasted GIF waits here, full size, with Send: drawing is pure (no writes, no submits), so it goes out from
-    // the button's handler, the same path as the tray's Send (2026-11-07: sending it from the hook or the drawing failed).
-    if (pending) {
-      const { Svg } = $.ui.resolve(e) as { Svg?: any }
-      const path = /\n(\S+\.gif)\s*$/.exec(pending.text)?.[1]
-      const svg = Svg && path ? await svgOf($, path.replace(/\.gif$/i, '.svg')) : ''
-      const send = async () => {
-        let text = ''
-        await update($, picker, v => {
-          text = v.pending?.text ?? ''
-          return { ...v, pending: null }
-        })
-        if (text) await $.prompt.submit({ text, asUser: true })
-      }
-      return (
-        <Box flexDirection="column" gap={1}>
-          {svg ? sizedGif(Svg, svg) : <Text>🎞️ GIF ready</Text>}
-          <Box flexDirection="row" gap={1}>
-            <Button key="gif-pending-send" label="➤ Send" plain onPress={send} />
-            <Button key="gif-pending-drop" label="✕" plain dimColor role="dismiss" onPress={() => update($, picker, v => ({ ...v, pending: null }))} />
-          </Box>
-        </Box>
-      )
-    }
     // tray closed with a GIF attached: a small chip until the next message takes it
     if (!isOpen && attached) {
       return (
@@ -331,7 +314,11 @@ export const register: Register = on => {
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
     // a message with a pasted image also carries the engine's "[Image: source: ...]" line: not part of it
     const shown = e.props.text.replace(/\[Image[^\]]*\]/g, '').trim()
-    const m = /^([\s\S]*?)\n?GIF: .*\n(\S*gifmate[\\/][0-9a-f]{12}\.gif)\s*$/i.exec(shown)
+    let m = /^([\s\S]*?)\n?GIF: .*\n(\S*gifmate[\\/][0-9a-f]{12}\.gif)\s*$/i.exec(shown)
+    // the message as typed, with a pasted GIF: the card gifmate made for that pasted image
+    const image = m ? null : IMAGE_LINE.exec(e.props.text)?.[1]
+    const kept = image ? (await read($, picker)).pasted?.[pasteKey(image)] : undefined
+    if (kept) m = Object.assign([shown, shown, kept], { index: 0, input: shown }) as RegExpExecArray
     const svg = m && e.surface !== 'terminal' ? await svgOf($, m[2].replace(/\.gif$/i, '.svg')) : ''
     if (!m || !svg) return next(e)
     const { Box } = $.ui.resolve(e)
@@ -387,12 +374,15 @@ export const register: Register = on => {
       // card). So when the session is idle the paste is dropped and sent again as a GIF message, as Send does.
       // Mid-turn (e.turnId) a plugin's prompt would wait for idle, and a paste was lost that way (2026-11-07):
       // then the prompt is rewritten in place, drawn small but delivered at once.
-      // A submit from inside this hook is lost: the band above the prompt sends it, as Send does (see AbovePrompt).
+      // Rewritten in place, so it reaches the agent at once as a GIF message. The chat still draws the message as
+      // typed, with the engine's image line: remember that image, and UserMessage draws the GIF card for it.
+      // (Dropping and re-sending lost the GIF or took a second click: a hook's own submit and a drawing's are refused.)
       if (kept) {
-        const text = gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept)
-        const at = (await $.clock.now()) as number
-        await update($, picker, v => ({ ...v, pending: { text, at } }))
-        return { drop: 'gifmate: your GIF is above the prompt, press Send' }
+        e = { ...e, text: gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept) }
+        if (kept.from) {
+          const key = pasteKey(kept.from)
+          await update($, picker, v => ({ ...v, pasted: Object.fromEntries([...Object.entries(v.pasted ?? {}).slice(-29), [key, kept.file]]) }))
+        }
       }
     }
     // A GIF sent from the tray is a message, like in any chat: its meaning, not its pixels.
