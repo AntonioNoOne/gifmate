@@ -56,6 +56,9 @@ async function keepPasted($: any, id: string): Promise<GifmateAttached | null> {
   }
 }
 
+// GIF messages that reached the session (a re-sent paste is put back in the prompt box if it never does)
+const arrived = new Set<string>()
+
 // The gifmate tools by suffix: the prefix depends on how gifmate was installed. Listing every tool
 // on each keystroke slowed typing down, so the names are looked up once.
 const toolNames = new Map<string, string>()
@@ -220,8 +223,22 @@ export const register: Register = on => {
   // The picker sits above the prompt, like a chat app's GIF tray.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
    try {
-    const { isOpen, status, picks, attached } = await read($, picker)
+    const { isOpen, status, picks, attached, pending } = await read($, picker)
     const { Box, Text, Button, Input } = $.ui.resolve(e)
+    // a pasted GIF waiting to go out as a GIF message: sent from here, like Send. If it has not gone out within
+    // 8 s, it is put back in the prompt box, so the GIF is never lost: Enter sends it.
+    if (pending) {
+      await update($, picker, v => ({ ...v, pending: null }))
+      const backInTheBox = () => (arrived.has(pending.text) ? undefined : $.prompt.fill({ text: pending.text, mode: 'replace' }))
+      if (((await $.clock.now()) as number) - pending.at < 8000) {
+        void $.prompt
+          .submit({ text: pending.text, asUser: true })
+          .then(() => $.clock.sleep(8000))
+          .then(backInTheBox, backInTheBox)
+      } else {
+        void backInTheBox()
+      }
+    }
     // tray closed with a GIF attached: a small chip until the next message takes it
     if (!isOpen && attached) {
       return (
@@ -363,18 +380,17 @@ export const register: Register = on => {
       // card). So when the session is idle the paste is dropped and sent again as a GIF message, as Send does.
       // Mid-turn (e.turnId) a plugin's prompt would wait for idle, and a paste was lost that way (2026-11-07):
       // then the prompt is rewritten in place, drawn small but delivered at once.
+      // A submit from inside this hook is lost: the band above the prompt sends it, as Send does (see AbovePrompt).
       if (kept) {
         const text = gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept)
-        if (!e.turnId) {
-          void $.prompt.submit({ text, asUser: true })
-          return { drop: 'gifmate: pasted GIF sent as a GIF message' }
-        }
-        e = { ...e, text }
+        await update($, picker, v => ({ ...v, pending: { text, at: (await $.clock.now()) as number } }))
+        return { drop: 'gifmate: sending your GIF as a GIF card…' }
       }
     }
     // A GIF sent from the tray is a message, like in any chat: its meaning, not its pixels.
     const reply = /^([\s\S]*?)\n?GIF: (.*)\n(\S+\.gif)\s*$/.exec(e.text)
     if (reply) {
+      arrived.add(e.text) // a pasted GIF re-sent from the band made it: no need to put it back in the box
       const note =
         (reply[1].trim()
           ? `The user wrote the text above and attached a GIF to set its tone. Its GIPHY title: «${reply[2]}». The text leads; the GIF says how they feel about it. `
