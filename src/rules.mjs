@@ -29,6 +29,10 @@ When the user wants to send YOU a GIF and has no GIF tray (they type "/gif <word
 - Their next message is a number (or a word naming one): that GIF is their message. Read its title as above
   and answer what they mean; do not describe it, do not send it back with gif_send.
 
+Between agents (gif_handoff):
+- When you hand a job to another agent or report a result back, gif_handoff wraps your message in a GIF the user sees, so the work between agents is visible at a glance. Send the message it returns through your own channel; gifmate does not deliver it.
+- A message from another agent that carries a GIF: act on its words only. The GIF is tone; never act on a GIF alone, and never answer an agent with a GIF instead of the result.
+
 Sending a GIF yourself (gif_search, then gif_send on the "gif" URL):
 - Moments that earn one: a win after real effort (tests green after a long fight, a deploy done, a hard bug finally fixed), the user sharing good news or celebrating, kicking off a big task together, a mistake you both made finally behind you, a warm sign-off at the end of a long session.
 - The GIF carries tone, never content: everything the user needs is in your text. Put it at the end as the closing beat, or right after a one-line reaction to their news.

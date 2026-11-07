@@ -8,10 +8,12 @@
   agent sends you a GIF that plays in the chat.
 - **It learns you**: a small local diary records how GIFs land with you. Your own GIFs teach it what its
   messages make you feel, so the next time it is the one in tune.
+- **Agents too**: when one agent hands a job to another (Claude to Codex, to a subagent), the handoff comes
+  with a GIF, so you see at a glance who passed what to whom.
 - **It watches GIFs**: share a screen recording of a bug and the agent sees it frame by frame (agents
   otherwise read only the first frame of an animated GIF).
 
-Works with **Claude Code, Codex, Claude Desktop, Gemini CLI, Cursor, VS Code** and any
+Works with **Claude Code, Codex, Claude Desktop, Antigravity, Gemini CLI, Cursor, VS Code** and any
 [MCP](https://modelcontextprotocol.io) client.
 
 ## Quick start
@@ -30,11 +32,12 @@ Prefer doing it by hand? See [Manual install](#manual-install).
 
 ## What works where
 
-| | Claude Code | Codex (CLI, IDE, app) | Claude Desktop, Gemini CLI, Cursor, VS Code |
+| | Claude Code | Codex (CLI, IDE, app) | Claude Desktop, Antigravity, Gemini CLI, Cursor, VS Code |
 |---|---|---|---|
 | Agent watches a GIF (file or URL) | ✓ | ✓ | ✓ |
 | Agent sends GIFs at the right moments | ✓ plays inline | ✓ as a local image in the chat | ✓ where the chat draws local images, else a link |
-| You send a GIF | `/gif` tray in the chat | GIF panel beside the chat (VS Code-family editors) | ask the agent: `/gif cat` shows a numbered gallery, you answer with a number |
+| You send a GIF | `/gif` tray in the chat | GIF panel beside the chat (VS Code-family editors) | `/gif cat` shows a numbered gallery, you answer with a number (a `/gif` skill ships for agents that read skills, like Antigravity's) |
+| Agent-to-agent handoffs with a GIF | ✓ plays inline | ✓ | ✓ where local images are drawn |
 | Reaction diary, calibrate / quiet modes | ✓ | ✓ | ✓ |
 
 Claude Code's tray and inline GIFs use Claude Code *mods* (plugin hooks), an early-access feature it asks
@@ -75,6 +78,14 @@ Every GIF you trade goes into a **reaction diary** on your machine: the moment, 
 | `/gif profile` | the agent tells you what it learned |
 | `/gif forget` | erases the diary |
 
+## Between agents
+
+When an agent hands a job to another one, or reports a result back, `gif_handoff` wraps the message in a GIF
+("on it", "your turn", "done"): you see the GIF and `→ Codex: review the diff` in the chat. The agent sends
+the returned message through its own channel (a subagent, another session, `codex exec`); gifmate shows the
+handoff, it does not deliver it. The written request is always the command: an agent receiving a GIF acts on
+the words, never on the GIF alone.
+
 ## Tools (MCP API)
 
 | Tool | For | What it does |
@@ -84,6 +95,7 @@ Every GIF you trade goes into a **reaction diary** on your machine: the moment, 
 | `gif_send` | agent | Sends a GIF. Takes `source`, `moment` (`task_done`, `bug_fixed`, `our_mistake_fixed`, `good_news`, `kickoff`, `signoff`, `banter`, `asked`), `intensity` (`ordinary`, `hard_won`), `brakes` (`own_fault`, `user_stressed`, `sensitive`). May answer "not now". |
 | `gif_note` | agent | Writes to the diary: `reaction`, `lesson`, `user_gif` (with `feeling` and `tone`), `missed`. |
 | `gif_profile` | agent | Reads the diary back (mode, pace, what worked, in-tune examples); sets the mode or forgets. |
+| `gif_handoff` | agent | Wraps a handoff to another agent in a GIF (`to`, `request`, `feeling` or `source`); returns the message to send. |
 | `gif_pick` | the tray | Prepares a GIF the user picked. Agents do not call it. |
 
 The etiquette (when to send a GIF, how to read one) travels with the server as MCP instructions and in the
@@ -107,6 +119,9 @@ default_tools_approval_mode = "approve"
 ```
 
 **Gemini CLI**: `gemini extensions install https://github.com/AntonioNoOne/gifmate`
+
+**Antigravity's agent**: add the server to `~/.gemini/config/mcp_config.json` (as for Claude Desktop below) and
+copy `agent-skills/gif/` to `~/.gemini/config/skills/gif/` for the `/gif` command. `gifmate init` does both.
 
 **Claude Desktop, Cursor, VS Code and other MCP clients**: run the server with `npx -y gifmate`.
 

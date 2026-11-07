@@ -127,7 +127,8 @@ export const register: Register = on => {
   // Me -> you: play the GIF gif_send prepared (an SMIL SVG), under its tool row.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     const row = await next(e)
-    if (!/gif_send$/.test(e.props.tool) || e.props.isErrored) return row
+    // gif_handoff too: a job passed to another agent shows as its GIF plus "→ agent: request"
+    if (!/gif_(send|handoff)$/.test(e.props.tool) || e.props.isErrored) return row
     const gif = pathFrom(e.props.output, SENT)
     if (!gif) return row
 
@@ -150,7 +151,15 @@ export const register: Register = on => {
       )
     }
     const { Svg } = $.ui.resolve(e) as { Svg: any }
-    const gifOnly = sizedGif(Svg, svg)
+    const handoff = /^gifmate-handoff: (.+)$/m.exec(String(e.props.output ?? ''))?.[1]
+    const gifOnly = handoff ? (
+      <Box flexDirection="column">
+        {sizedGif(Svg, svg)}
+        <Text dimColor>{handoff}</Text>
+      </Box>
+    ) : (
+      sizedGif(Svg, svg)
+    )
     // like a teammate's message: just the GIF; the full transcript (ctrl+o) keeps the tool row
     if (!e.props.isExpanded) return gifOnly
     return (

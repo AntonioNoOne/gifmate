@@ -11,6 +11,7 @@
     "src",
     "mod",
     "commands",
+    "agent-skills",
     "types",
     ".claude-plugin",
     ".agents",

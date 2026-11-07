@@ -252,6 +252,42 @@ server.registerTool(
   },
 );
 
+// Agent -> agent: a job handed over comes with a GIF, so the human sees at a glance who passed what to whom.
+// The written request is the command; the GIF only sets the tone (another agent must never act on a GIF alone).
+server.registerTool(
+  "gif_handoff",
+  {
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    description:
+      "When you hand a job to another agent (a subagent, Codex, another Claude session) or report back a result, wrap your message in a GIF the user sees in the chat. Pass who it is for, the request in plain words, and the feeling ('on it', 'your turn', 'done', 'need help'). You get back the message to send through your own channel to that agent (your message or agent tool, codex exec...): gifmate shows it, it does not deliver it. Not limited by the pace of GIFs to the user.",
+    inputSchema: {
+      to: z.string().max(60).describe("The agent it is for, e.g. 'Codex', 'reviewer subagent'"),
+      request: z.string().max(2000).describe("The request or result, in plain words: this is what the other agent acts on"),
+      feeling: z.string().max(40).default("on it").describe("The tone, searched on GIPHY when no source is given"),
+      source: z.string().optional().describe("A GIF URL or path, instead of searching the feeling"),
+    },
+  },
+  async ({ to, request, feeling, source }) => {
+    try {
+      let gif = source;
+      if (!gif) [gif] = (await searchGiphy(feeling, { limit: 1 })).map((r) => r.gif);
+      if (!gif) throw new Error(`No GIF found for "${feeling}".`);
+      const { file, svgFile } = await saveGif(await loadBytes(gif));
+      await note({ kind: "handoff", client: clientName(), to: label(to), feeling: label(feeling) });
+      const line = `→ ${to}: ${request.length > 120 ? request.slice(0, 117) + "…" : request}`;
+      const message =
+        `${request}\n\n(Handed over with gifmate. The GIF below only sets the tone; the text above is the request.)\n` +
+        `![${feeling.replace(/[[\]]/g, "")}](${pathToFileURL(file).href})`;
+      const head = isClaude()
+        ? [`gifmate-sent: ${file}`, ...(svgFile ? [`gifmate-svg: ${svgFile}`] : []), `gifmate-handoff: ${line}`].join("\n")
+        : `Show the user this line and GIF, so they see the handoff:\n${line}\n![${feeling.replace(/[[\]]/g, "")}](${pathToFileURL(file).href})`;
+      return { content: [{ type: "text", text: `${head}\n\nMessage to send to ${to}:\n${message}` }] };
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
 server.registerTool(
   "gif_pick",
   {

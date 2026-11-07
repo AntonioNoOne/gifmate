@@ -1,7 +1,7 @@
 // `gifmate init`: one step for whoever installs it. Asks for the GIPHY key if missing, finds the agents and
 // editors on this machine and wires gifmate into each, asking before every change (--yes accepts all).
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -43,8 +43,8 @@ const desktopConfig = () =>
     : process.platform === "darwin"
       ? join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json")
       : join(homedir(), ".config", "Claude", "claude_desktop_config.json");
-function addToDesktop() {
-  const file = desktopConfig();
+// Merge gifmate into an MCP config file (Claude Desktop, the Antigravity agent): a .bak of the old one, an atomic write
+function addMcp(file) {
   const before = existsSync(file) ? readFileSync(file, "utf-8") : "";
   const config = JSON.parse(before || "{}");
   config.mcpServers = { ...config.mcpServers, gifmate: { command: mcp[0], args: mcp.slice(1) } };
@@ -54,10 +54,22 @@ function addToDesktop() {
   return true;
 }
 
+// The Antigravity agent: MCP servers in ~/.gemini/config/mcp_config.json, "/name" commands are skills
+const agyConfig = join(homedir(), ".gemini", "config");
+function addToAntigravity() {
+  addMcp(join(agyConfig, "mcp_config.json"));
+  const dir = join(agyConfig, "skills", "gif");
+  mkdirSync(dir, { recursive: true });
+  copyFileSync(join(root, "agent-skills", "gif", "SKILL.md"), join(dir, "SKILL.md"));
+  return true;
+}
+
 function steps() {
   const list = [];
   if (existsSync(dirname(desktopConfig())))
-    list.push({ what: "Claude Desktop: the MCP server (restart the app after)", cmds: [], apply: addToDesktop, show: `add "gifmate" to ${desktopConfig()} (backup: .bak)` });
+    list.push({ what: "Claude Desktop: the MCP server (restart the app after)", cmds: [], apply: () => addMcp(desktopConfig()), show: `add "gifmate" to ${desktopConfig()} (backup: .bak)` });
+  if (existsSync(agyConfig))
+    list.push({ what: "Antigravity agent: the MCP server and the /gif skill", cmds: [], apply: addToAntigravity, show: `add "gifmate" to ${join(agyConfig, "mcp_config.json")} and the skill to ${join(agyConfig, "skills", "gif")}` });
   if (found("claude") && existsSync(join(root, ".claude-plugin"))) {
     list.push({
       what: "Claude Code: the plugin (tools, in-chat GIF tray, inline GIFs)",
