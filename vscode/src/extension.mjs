@@ -17,7 +17,12 @@ const CHATS = [
   { id: "codex", label: "Codex", focus: ["chatgpt.openSidebar"], present: () => !!vscode.extensions.getExtension("openai.chatgpt") },
   // Antigravity's built-in agent (its Gemini chat, Ctrl+L): which of its commands an extension may run is not
   // documented, so the first that works wins
-  { id: "antigravity", label: "Antigravity agent (Gemini)", focus: ["antigravity.openChatView", "antigravity.toggleChatFocus", "antigravity.openAgent"], present: () => /antigravity/i.test(vscode.env.appName) },
+  { id: "antigravity", label: "Antigravity agent (Gemini)", focus: ["antigravity.openChatView", "antigravity.toggleChatFocus", "antigravity.openAgent"],
+    // its chat takes no editor paste; antigravity.addContext adds text and files to its next message (seen in its code)
+    add: (file, title) => vscode.commands.executeCommand("antigravity.addContext", [
+      { type: "text", text: `[GIF: ${title}] ` },
+      { type: "file", uri: vscode.Uri.file(file), label: `GIF ${title}` },
+    ]), present: () => /antigravity/i.test(vscode.env.appName) },
   { id: "clipboard", label: "Clipboard only (Ctrl+V anywhere)" },
 ];
 
@@ -133,6 +138,11 @@ class Picker {
             } catch {}
           }
           if (!opened) throw new Error("no command opened it");
+          if (this.chat.add) {
+            await this.chat.add(file, result.title);
+            this.post({ type: "status", text: `Added to the ${this.chat.label} message (the GIF is also copied: Ctrl+V pastes it as an image)` });
+            return;
+          }
           await new Promise((r) => setTimeout(r, 400));
           await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
           this.post({ type: "status", text: `Pasted in the ${this.chat.label} chat (not there? press Ctrl+V)` });
