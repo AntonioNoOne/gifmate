@@ -52,6 +52,14 @@ Codex asks before each MCP tool call. To let gifmate's tools run without asking,
 default_tools_approval_mode = "approve"
 ```
 
+Codex passes the model only the first line of an MCP server's instructions, so a GIF attached from the
+[GIF panel](vscode/README.md) gets ignored on a plain "ciao". One line in `~/.codex/AGENTS.md` fixes it
+(measured 2/2 replies reading the GIF with it, 0/4 without):
+
+```md
+GIF from the gifmate panel: an attached file named "GIF <title>.gif" is part of the user's message, their reaction. Read its title and answer text and GIF together; never describe it.
+```
+
 **Gemini CLI** (extension): `gemini extensions install https://github.com/AntonioNoOne/gifmate`
 
 **Cursor, VS Code and other MCP clients**: clone the repository and point the client at the bundled server
