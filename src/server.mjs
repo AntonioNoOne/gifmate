@@ -21,7 +21,7 @@ if (process.argv[2] === "init" || process.argv[2] === "setup") {
   process.exit(0);
 }
 
-const server = new McpServer({ name: "gifmate", version: "0.3.0" }, { instructions: GIF_RULES });
+const server = new McpServer({ name: "gifmate", version: "0.3.1" }, { instructions: GIF_RULES });
 
 // Sent GIFs and previews live in the temp folder for the chat to draw; a day later nobody needs them.
 const DIR = join(tmpdir(), "gifmate");
@@ -295,13 +295,15 @@ server.registerTool(
     description:
       "For GIF pickers (the gifmate tray): prepares the GIF the USER picked to send you, and writes it to their diary. Never call it yourself: to send a GIF, use gif_send.",
     inputSchema: {
-      source: z.string().describe("GIF URL or local path"),
+      source: z.string().optional().describe("GIF URL or local path"),
+      data: z.string().max(28_000_000).optional().describe("Or the GIF itself, base64 (a GIF pasted in the chat)"),
       title: z.string().optional().describe("The GIF's title"),
     },
   },
-  async ({ source, title }) => {
+  async ({ source, data, title }) => {
     try {
-      const { file } = await saveGif(await loadBytes(source));
+      if (!source && !data) throw new Error("Give source or data.");
+      const { file } = await saveGif(data ? Buffer.from(data, "base64") : await loadBytes(source));
       await note({ kind: "picked", client: clientName(), gif: label(title) });
       return { content: [{ type: "text", text: `gifmate-sent: ${file}` }] };
     } catch (err) {

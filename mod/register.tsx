@@ -33,6 +33,28 @@ const picker = atom({ plugin: 'gifmate', key: 'picker' } as const, CLOSED, { sha
 // The GIF as a chat message: optional words, then the GIF's title and file (what prompt.submit reads back).
 const gifMessage = (words: string, a: GifmateAttached) => `${words ? words + '\n' : ''}GIF: ${a.title}\n${a.file}`
 
+// A pasted GIF's bytes (read in slices), kept by gifmate's gif_pick: null if it is not a GIF or cannot be read.
+async function keepPasted($: any, id: string): Promise<GifmateAttached | null> {
+  try {
+    let base64 = ''
+    let offset: number | undefined
+    do {
+      const part = await $.prompt.media(offset === undefined ? { id } : { id, offset })
+      if (!part?.base64) return null
+      base64 += part.base64
+      offset = part.next
+    } while (offset !== undefined && base64.length < 28_000_000)
+    if (!base64.startsWith('R0lGOD')) return null // the engine may have turned it into a still PNG
+    const tool = await toolNamed($, '__gif_pick')
+    if (!tool) return null
+    const { text } = await $.tool.call({ tool, data: base64, title: 'pasted GIF' } as any)
+    const file = pathFrom(text, SENT)
+    return file ? { title: 'pasted GIF (no title: look at it)', file } : null
+  } catch {
+    return null
+  }
+}
+
 // The gifmate tools by suffix: the prefix depends on how gifmate was installed. Listing every tool
 // on each keystroke slowed typing down, so the names are looked up once.
 const toolNames = new Map<string, string>()
@@ -329,6 +351,13 @@ export const register: Register = on => {
       return result
     }
     if (attached) e = { ...e, text: gifMessage(e.text.trim(), attached) }
+    // A GIF pasted in the prompt (Ctrl+V): the model gets one still frame. Read its bytes, have gifmate keep it,
+    // and send it like a GIF from the tray: it plays in the chat and the agent reads it as your message.
+    else if (!e.command && !e.isMeta && e.origin?.kind !== 'plugin') {
+      const first = (e.attachments ?? []).find(a => a.mediaType === 'image/gif' && a.id)
+      const kept = first ? await keepPasted($, first.id as string) : null
+      if (kept) e = { ...e, text: gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept) }
+    }
     // A GIF sent from the tray is a message, like in any chat: its meaning, not its pixels.
     const reply = /^([\s\S]*?)\n?GIF: (.*)\n(\S+\.gif)\s*$/.exec(e.text)
     if (reply) {
