@@ -75,13 +75,17 @@ function steps() {
       what: "Claude Code: the plugin (tools, in-chat GIF tray, inline GIFs)",
       cmds: [
         ["claude", "plugin", "marketplace", "add", fromClone ? root : REPO],
+        ["claude", "plugin", "marketplace", "update", "gifmate"],
         ["claude", "plugin", "install", "gifmate@gifmate"],
+        ["claude", "plugin", "update", "gifmate@gifmate"],
       ],
+      // already there is fine: adding or installing again fails, updating brings the new version
+      tolerant: true,
     });
   }
   if (found("codex")) list.push({ what: "Codex: the MCP server", cmds: [["codex", "mcp", "add", "gifmate", "--", ...mcp]] });
   if (found("gemini") && existsSync(join(root, "gemini-extension.json")))
-    list.push({ what: "Gemini CLI: the extension", cmds: [["gemini", "extensions", "install", fromClone ? root : `https://github.com/${REPO}`]] });
+    list.push({ what: "Gemini CLI: the extension", cmds: [["gemini", "extensions", "install", fromClone ? root : `https://github.com/${REPO}`, "--consent"]] });
   const vsix = existsSync(join(root, "vscode")) ? readdirSync(join(root, "vscode")).filter((f) => f.endsWith(".vsix")).sort().at(-1) : null;
   if (vsix) {
     for (const [editor, cli] of [["VS Code", "code"], ["Cursor", "cursor"], ["Antigravity", "antigravity-ide"]]) {
@@ -128,7 +132,7 @@ export async function init(args = []) {
       if (!(await ask(`${step.what}?`))) continue;
       let ok;
       try {
-        ok = step.apply ? step.apply() : step.cmds.every(run);
+        ok = step.apply ? step.apply() : step.tolerant ? step.cmds.map(run).some(Boolean) : step.cmds.every(run);
       } catch (err) {
         console.log(`  ${err.message}`);
         ok = false;
