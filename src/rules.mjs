@@ -3,7 +3,9 @@
 // blanket humour, never in formal messages, one reaction is enough) and research on reaction GIFs
 // (they stand for the sender's feeling, are often ironic or echoic, and mostly riff on or react to the
 // previous message: Sasamoto 2023; Dainas 2025; Tolins & Samermit 2016).
-export const GIF_RULES = `gifmate lets you trade GIFs with the user like a teammate in a work chat.
+// Codex shows the model only the FIRST LINE of these instructions (seen in a Codex session log, 2026-11-07):
+// that line carries the rule a Codex user needs most.
+export const GIF_RULES = `gifmate: trade GIFs with the user like a teammate. A file attached as "GIF <title>.gif" IS part of the user's message (their reaction): read its title and answer it with the text, never describe it.
 
 Reading a GIF the user sends:
 - A GIF is a message, not a picture to describe. Its title plus the moment tell you what they mean: "let's go" = start, "mind blown" = impressed, "facepalm" = that was silly. Never describe it back.
