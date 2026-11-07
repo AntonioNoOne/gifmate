@@ -265,6 +265,43 @@ function keyFrames(bytes, maxFrames) {
   return { width: reader.width, height: reader.height, totalFrames: n, duration: t, frames };
 }
 
+// The same GIF with its middle frame put in front for 20 ms. A chat that turns a pasted GIF into a still
+// (Codex) sends its first frame to the model, often black; this way the model sees the moment that matters.
+export function withCover(bytes) {
+  const src = new Uint8Array(bytes);
+  const gif = keyFrames(src, 3);
+  const middle = gif.frames[Math.floor(gif.frames.length / 2)];
+  const { w, h, rgb } = flatten(middle.rgba, gif.width, gif.height, Math.max(gif.width, gif.height));
+  // the cover's own palette (more than 256 colours snap to a 6x7x6 cube, as in toGif)
+  const many = new Set();
+  for (let i = 0; i < rgb.length && many.size <= 256; i += 3) many.add((rgb[i] << 16) | (rgb[i + 1] << 8) | rgb[i + 2]);
+  const snap = (v, n) => (many.size > 256 ? Math.round((v / 255) * (n - 1)) * (255 / (n - 1)) : v);
+  const palette = [];
+  const index = new Map();
+  const pixels = new Uint8Array(w * h);
+  for (let p = 0; p < w * h; p++) {
+    const c = (snap(rgb[p * 3], 6) << 16) | (snap(rgb[p * 3 + 1], 7) << 8) | snap(rgb[p * 3 + 2], 6);
+    if (!index.has(c)) index.set(c, palette.push(c) - 1);
+    pixels[p] = index.get(c);
+  }
+  let size = 2;
+  while (size < palette.length) size *= 2;
+  while (palette.length < size) palette.push(0);
+  // encode it alone, then lift its frame (control block, descriptor, local palette, data) out of that file
+  const buf = new Uint8Array(w * h * 2 + 4096);
+  const writer = new GifWriter(buf, w, h, {});
+  writer.addFrame(0, 0, w, h, pixels, { palette, delay: 2, disposal: 2 }); // 2 = cleared after: frame 1 draws as before
+  const cover = buf.subarray(13, writer.end() - 1);
+  // insert it before the original first frame: after header, screen descriptor, global palette, extensions
+  let at = 13 + (src[10] & 0x80 ? 3 * 2 ** ((src[10] & 7) + 1) : 0);
+  while (src[at] === 0x21 && src[at + 1] !== 0xf9) {
+    at += 2;
+    while (src[at]) at += src[at] + 1;
+    at++;
+  }
+  return Buffer.concat([src.subarray(0, at), cover, src.subarray(at)]);
+}
+
 export function framesOf(bytes, { maxFrames = 12, maxSide = 384, encode = toPng } = {}) {
   const gif = keyFrames(bytes, maxFrames);
   return {

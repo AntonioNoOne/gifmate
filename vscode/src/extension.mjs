@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
 import { searchGiphy } from "../../src/giphy.mjs";
-import { loadBytes } from "../../src/gif.mjs";
+import { loadBytes, withCover } from "../../src/gif.mjs";
 import { MIN_LENGTH, waitAfterTyping } from "../../mod/typing.ts";
 
 const ATTACH = "chatgpt.addFileToThread"; // the Codex extension's "Add File to Codex Chat"
@@ -83,13 +83,16 @@ class Picker {
       // the file name is the title: it is what the agent reads as your message
       const name = `GIF ${result.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "").slice(0, 80).trim() || "GIF"}.gif`;
       const file = join(dir, name);
-      await writeFile(file, await loadBytes(result.gif));
+      const bytes = await loadBytes(result.gif);
+      let covered = bytes;
+      try {
+        covered = withCover(bytes); // the model sees the middle frame of a pasted GIF, not its first one
+      } catch {}
+      await writeFile(file, covered);
       // Codex draws an attached file as a name chip only; a pasted image file it draws as an image.
       // So the GIF also goes to the clipboard as a file, for Ctrl+V into the message.
       const copied = await copyFile(file);
       const commands = await vscode.commands.getCommands(true);
-      // A pasted GIF reaches the model as its first frame only (often black): the attached file carries the title.
-      if (commands.includes(ATTACH)) await vscode.commands.executeCommand(ATTACH, vscode.Uri.file(file));
       if (copied && commands.includes(OPEN_CODEX)) {
         // as if the person pressed Ctrl+V in the Codex composer: focus it, then paste
         await vscode.commands.executeCommand(OPEN_CODEX);
@@ -97,6 +100,7 @@ class Picker {
         await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
         this.post({ type: "status", text: "Incollata nella chat di Codex (se non la vedi: Ctrl+V)" });
       } else if (commands.includes(ATTACH)) {
+        await vscode.commands.executeCommand(ATTACH, vscode.Uri.file(file));
         this.post({ type: "status", text: "Allegata alla chat di Codex" });
       } else {
         if (!copied) await vscode.env.clipboard.writeText(file);
