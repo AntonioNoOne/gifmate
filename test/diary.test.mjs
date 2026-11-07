@@ -59,6 +59,14 @@ test("a bitter GIF of theirs is no example: it keeps the agent's GIFs away for a
   assert.equal(gate(profile([sour], new Date("2026-11-07T11:30:00Z")), "task_done"), null);
 });
 
+test("a raw pick from the tray is not a reaction: it never brings quiet mode closer", () => {
+  const days = ["05", "05", "06", "06", "07"].map((d, i) => sent(`2026-11-${d}T1${i}:00:00Z`, i % 2 ? "bug_fixed" : "task_done"));
+  const picks = [1, 2, 3].map(() => at("2026-11-07T12:00:00Z", { kind: "picked", gif: "Angry Dog" }));
+  const p = profile([...days, ...picks]);
+  assert.equal(p.readyForQuiet, false);
+  assert.deepEqual(p.recentPicks, ["Angry Dog", "Angry Dog", "Angry Dog"]);
+});
+
 test("the diary keeps labels short and forgets on request", async () => {
   const file = join(await mkdtemp(join(tmpdir(), "gifmate-")), "diary.jsonl");
   await note({ kind: "lesson", note: "x".repeat(500) }, file);

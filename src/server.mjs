@@ -104,6 +104,9 @@ const clientName = () => server.server.getClientVersion()?.name ?? "unknown";
 // only Claude Code has the gifmate mod that draws GIFs from our lines: Claude Desktop ("claude-ai") gets markdown
 const isClaude = () => /^claude-code$/i.test(clientName());
 
+// what the diary keeps of a GIF: its title, never where it came from
+const label = (title) => (title ? String(title).replace(/[\\/]|https?:\S*/g, " ").trim().slice(0, 80) || "untitled" : "untitled");
+
 const fail = (err) => ({ isError: true, content: [{ type: "text", text: String(err.message || err) }] });
 
 server.registerTool(
@@ -213,7 +216,7 @@ server.registerTool(
       const refused = gate(before, moment, { brakes });
       if (refused) return { content: [{ type: "text", text: refused }] };
       const { file, svgFile } = await saveGif(await loadBytes(source));
-      await note({ kind: "sent", client: clientName(), moment, intensity, brakes, gif: title || caption || source });
+      await note({ kind: "sent", client: clientName(), moment, intensity, brakes, gif: label(title || caption) });
       const after = [];
       if (before.firstEver) {
         after.push(
@@ -263,7 +266,7 @@ server.registerTool(
   async ({ source, title }) => {
     try {
       const { file } = await saveGif(await loadBytes(source));
-      await note({ kind: "user_gif", client: clientName(), gif: title || source, note: "picked in the tray" });
+      await note({ kind: "picked", client: clientName(), gif: label(title) });
       return { content: [{ type: "text", text: `gifmate-sent: ${file}` }] };
     } catch (err) {
       return fail(err);

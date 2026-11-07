@@ -65,7 +65,7 @@ Every GIF you trade goes into a **reaction diary** on your machine: the moment, 
   (*ordinary*). Three brakes stop any GIF: a slip of the agent's own, you under stress, a sensitive context
   (security, data, money, a client, production).
 - **Calibrate, then quiet.** At first the agent asks, now and then, if a GIF fit (👍/👎). Once it has enough
-  clear signal (5 GIFs over 3 days, 3 clear reactions, no recent "no") it says so once and only watches.
+  clear signal (5 GIFs over 3 days and 2 kinds of moment, 3 clear reactions, no recent "no") it says so once and only watches.
 - **The pace is enforced by gifmate**, not left to the agent: 30 minutes between its GIFs, 4 a day.
   A GIF you asked for, or a reply to your playful one, always goes through.
 
@@ -114,7 +114,8 @@ default_tools_approval_mode = "approve"
 - Cursor, `~/.cursor/mcp.json`: same as Claude Desktop.
 - VS Code, user `mcp.json`: `{ "servers": { "gifmate": { "type": "stdio", "command": "npx", "args": ["-y", "gifmate"] } } }`
 
-**GIF panel** for VS Code, Cursor, Antigravity: install `vscode/gifmate-panel-*.vsix` with
+**GIF panel** for VS Code, Cursor, Antigravity: `gifmate init` installs it; by hand, download
+`gifmate-panel-*.vsix` from the [latest release](https://github.com/AntonioNoOne/gifmate/releases/latest) and run
 `code --install-extension <file>` (or `cursor`, `antigravity-ide`).
 
 **GIPHY key**: `npx -y gifmate init`, or a `GIPHY_API_KEY` environment variable (it wins). The key is saved
@@ -123,7 +124,8 @@ A free key allows 100 searches an hour; repeated searches are remembered for 10 
 
 ## Privacy
 
-- **Nothing leaves your machine except GIPHY searches**, sent with your key as GIPHY's API requires.
+- **What leaves your machine**: GIPHY searches (with your key, as GIPHY's API requires) and the download of
+  any GIF URL you or the agent give to a tool, which the host of that URL sees like any download.
 - The **diary** is one file next to the key (`diary.jsonl`): labels only (moment, GIF title, outcome, a note of
   at most 140 characters), never the conversation. `/gif forget` deletes it.
 - When the agent watches a GIF, its frames become part of the conversation and reach your model provider like

@@ -90,7 +90,7 @@ class Picker {
         covered = withCover(bytes); // the model sees the middle frame of a pasted GIF, not its first one
       } catch {}
       await writeFile(file, covered);
-      void note({ kind: "user_gif", client: "gifmate-panel", gif: result.title, note: "picked in the panel" }).catch(() => {});
+      void note({ kind: "picked", client: "gifmate-panel", gif: result.title.slice(0, 80) }).catch(() => {});
       // Codex draws an attached file as a name chip only; a pasted image file it draws as an image.
       // So the GIF also goes to the clipboard as a file, for Ctrl+V into the message.
       const copied = await copyFile(file);

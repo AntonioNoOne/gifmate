@@ -82,6 +82,8 @@ export function profile(rows, now = new Date()) {
     // in tune: what the user felt (their own positive or playful GIF) after each kind of message of yours: send that first next time
     inTune: tune(rows),
     missedByMoment: rows.filter((r) => r.kind === "missed").reduce((m, r) => ({ ...m, [situation(r)]: (m[situation(r)] ?? 0) + 1 }), {}),
+    // GIFs the user picked lately (tray, panel): read the meaning, then record it with gif_note kind user_gif
+    recentPicks: rows.filter((r) => r.kind === "picked").slice(-5).map((r) => r.gif),
     lessons: rows.filter((r) => r.kind === "lesson").slice(-20).map((r) => r.note),
     overused: [...titles].filter(([, n]) => n >= 3).map(([t]) => t),
     recentReactions: reactions.slice(-5).map((r) => ({ situation: situation(r), outcome: r.outcome, strength: r.strength })),
