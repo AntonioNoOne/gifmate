@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { framesOf, loadBytes, stillSvg } from "./gif.mjs";
 import { searchGiphy } from "./giphy.mjs";
@@ -185,10 +186,21 @@ server.registerTool(
   async ({ source, caption }) => {
     try {
       const { file, svgFile } = await saveGif(await loadBytes(source));
-      const lines = [`gifmate-sent: ${file}`];
-      if (svgFile) lines.push(`gifmate-svg: ${svgFile}`);
-      if (caption) lines.push(caption);
-      return { content: [{ type: "text", text: lines.join("\n") }] };
+      // Claude Code with the gifmate mod draws the GIF from these lines. Other clients (Codex, Cursor, ...)
+      // have no mod: they get a markdown image to put in the reply, which their chat may draw or show as a link.
+      if (/claude/i.test(server.server.getClientVersion()?.name ?? "")) {
+        const lines = [`gifmate-sent: ${file}`];
+        if (svgFile) lines.push(`gifmate-svg: ${svgFile}`);
+        if (caption) lines.push(caption);
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      }
+      const url = /^https?:\/\//i.test(source) ? source : pathToFileURL(file).href;
+      const image = `![${(caption || "GIF").replace(/[[\]]/g, "")}](${url})`;
+      return {
+        content: [
+          { type: "text", text: `GIF ready. Put this line in your reply, on its own, so the user sees it:\n${image}\nSaved locally at ${file}.` },
+        ],
+      };
     } catch (err) {
       return fail(err);
     }
