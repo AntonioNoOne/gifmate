@@ -356,7 +356,12 @@ export const register: Register = on => {
     else if (!e.command && !e.isMeta && e.origin?.kind !== 'plugin') {
       const first = (e.attachments ?? []).find(a => a.mediaType === 'image/gif' && a.id)
       const kept = first ? await keepPasted($, first.id as string) : null
-      if (kept) e = { ...e, text: gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept) }
+      // the chat draws the prompt as typed (a small pasted thumbnail): send it again as a GIF message, as Send
+      // does, so it shows full size like any GIF from the tray; this hook then reads it on its way back
+      if (kept) {
+        void $.prompt.submit({ text: gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept), asUser: true })
+        return { drop: 'gifmate: pasted GIF sent' }
+      }
     }
     // A GIF sent from the tray is a message, like in any chat: its meaning, not its pixels.
     const reply = /^([\s\S]*?)\n?GIF: (.*)\n(\S+\.gif)\s*$/.exec(e.text)

@@ -14,8 +14,8 @@ import { MIN_LENGTH, waitAfterTyping } from "../../mod/typing.ts";
 // The chats a GIF can go to: the command that brings each one's message box into focus.
 // Found in the editors themselves (2026-11-07): the Codex extension, Antigravity's agent panel (Ctrl+L).
 const CHATS = [
-  { id: "codex", label: "Codex", focus: "chatgpt.openSidebar" },
-  { id: "antigravity", label: "Antigravity agent", focus: "antigravity.openChatView" },
+  { id: "codex", label: "Codex", focus: "chatgpt.openSidebar", present: () => !!vscode.extensions.getExtension("openai.chatgpt") },
+  { id: "antigravity", label: "Antigravity agent", focus: "antigravity.openChatView", present: () => /antigravity/i.test(vscode.env.appName) },
   { id: "clipboard", label: "Clipboard only (Ctrl+V anywhere)" },
 ];
 
@@ -45,8 +45,9 @@ class Picker {
 
   // only the chats this editor has; the last one chosen, or the first found
   async offerChats() {
-    const commands = new Set(await vscode.commands.getCommands(true));
-    this.chats = CHATS.filter((c) => !c.focus || commands.has(c.focus));
+    // by what is installed, not by registered commands: Codex registers its own only once it activates,
+    // and Antigravity's agent commands are not in the list at all (both seen 2026-11-07)
+    this.chats = CHATS.filter((c) => !c.present || c.present());
     const saved = this.state.get("gifmate.chat");
     this.chat = this.chats.find((c) => c.id === saved) ?? this.chats[0];
     this.post({ type: "chats", items: this.chats.map(({ id, label }) => ({ id, label })), selected: this.chat.id });
@@ -120,10 +121,14 @@ class Picker {
         await vscode.env.clipboard.writeText(file);
         this.post({ type: "status", text: "GIF path copied: paste it in the chat" });
       } else if (this.chat?.focus) {
-        await vscode.commands.executeCommand(this.chat.focus);
-        await new Promise((r) => setTimeout(r, 400));
-        await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
-        this.post({ type: "status", text: `Pasted in the ${this.chat.label} chat (not there? press Ctrl+V)` });
+        try {
+          await vscode.commands.executeCommand(this.chat.focus);
+          await new Promise((r) => setTimeout(r, 400));
+          await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
+          this.post({ type: "status", text: `Pasted in the ${this.chat.label} chat (not there? press Ctrl+V)` });
+        } catch {
+          this.post({ type: "status", text: `Could not open the ${this.chat.label} chat: the GIF is copied, press Ctrl+V there` });
+        }
       } else {
         this.post({ type: "status", text: "GIF copied: press Ctrl+V in any chat" });
       }
