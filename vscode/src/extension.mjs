@@ -11,6 +11,7 @@ import { loadBytes } from "../../src/gif.mjs";
 import { MIN_LENGTH, waitAfterTyping } from "../../mod/typing.ts";
 
 const ATTACH = "chatgpt.addFileToThread"; // the Codex extension's "Add File to Codex Chat"
+const OPEN_CODEX = "chatgpt.openSidebar"; // focuses the Codex chat
 
 class Picker {
   results = [];
@@ -86,11 +87,16 @@ class Picker {
       // Codex draws an attached file as a name chip only; a pasted image file it draws as an image.
       // So the GIF also goes to the clipboard as a file, for Ctrl+V into the message.
       const copied = await copyFile(file);
-      const paste = copied ? " · Ctrl+V nella chat per vederla nel messaggio" : "";
       const commands = await vscode.commands.getCommands(true);
-      if (commands.includes(ATTACH)) {
+      if (copied && commands.includes(OPEN_CODEX)) {
+        // as if the person pressed Ctrl+V in the Codex composer: focus it, then paste
+        await vscode.commands.executeCommand(OPEN_CODEX);
+        await new Promise((r) => setTimeout(r, 400));
+        await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
+        this.post({ type: "status", text: "Incollata nella chat di Codex (se non la vedi: Ctrl+V)" });
+      } else if (commands.includes(ATTACH)) {
         await vscode.commands.executeCommand(ATTACH, vscode.Uri.file(file));
-        this.post({ type: "status", text: `Allegata alla chat di Codex${paste}` });
+        this.post({ type: "status", text: "Allegata alla chat di Codex" });
       } else {
         if (!copied) await vscode.env.clipboard.writeText(file);
         this.post({ type: "status", text: copied ? "GIF copiata: Ctrl+V nella chat" : "Percorso della GIF copiato, incollalo nella chat" });
