@@ -14,18 +14,14 @@ import { searchGiphy } from "./giphy.mjs";
 import { GIF_RULES } from "./rules.mjs";
 import { BRAKES, INTENSITIES, MOMENTS, TONES, diaryPath, forget, gate, note, profile, readDiary } from "./diary.mjs";
 
-if (process.argv[2] === "setup") {
-  const { createInterface } = await import("node:readline/promises");
-  const { saveGiphyKey } = await import("./config.mjs");
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const key = (await rl.question("GIPHY API key (free at https://developers.giphy.com): ")).trim();
-  rl.close();
-  if (!key) process.exit(1);
-  console.log(`Saved to ${await saveGiphyKey(key)}. Restart or reconnect gifmate in your agent.`);
+// `gifmate init` (or the older `setup`): key + wiring into the agents found here. Without arguments: the MCP server.
+if (process.argv[2] === "init" || process.argv[2] === "setup") {
+  const { init } = await import("./init.mjs");
+  await init(process.argv.slice(3));
   process.exit(0);
 }
 
-const server = new McpServer({ name: "gifmate", version: "0.2.0" }, { instructions: GIF_RULES });
+const server = new McpServer({ name: "gifmate", version: "0.3.0" }, { instructions: GIF_RULES });
 
 // Sent GIFs and previews live in the temp folder for the chat to draw; a day later nobody needs them.
 const DIR = join(tmpdir(), "gifmate");
@@ -105,7 +101,8 @@ const later = (job, search) => (queue = queue.then(() => (search === searches ? 
 
 // Claude Code presents itself as "claude-code", Codex as "codex-mcp-client" (checked 2026-11-07).
 const clientName = () => server.server.getClientVersion()?.name ?? "unknown";
-const isClaude = () => /claude/i.test(clientName());
+// only Claude Code has the gifmate mod that draws GIFs from our lines: Claude Desktop ("claude-ai") gets markdown
+const isClaude = () => /^claude-code$/i.test(clientName());
 
 const fail = (err) => ({ isError: true, content: [{ type: "text", text: String(err.message || err) }] });
 
@@ -225,9 +222,9 @@ server.registerTool(
       } else if (before.calibrationDue) {
         after.push("Calibration: end your reply with one short line asking if the GIF fit (👍/👎); record the answer with gif_note kind reaction.");
       }
-      if (before.mode === "taratura" && profile(await readDiary()).readyForSolo) {
-        await note({ kind: "mode", mode: "solo", note: "auto: enough reactions" });
-        after.push("You know this user well enough now: say once, in one line, that from now on you stop asking and only watch their reactions (they can switch back with /gif modo taratura).");
+      if (before.mode === "calibrate" && profile(await readDiary()).readyForQuiet) {
+        await note({ kind: "mode", mode: "quiet", note: "auto: enough reactions" });
+        after.push("You know this user well enough now: say once, in one line, that from now on you stop asking and only watch their reactions (they can switch back with /gif mode calibrate).");
       }
       const guide = after.length ? `\n${after.join("\n")}` : "";
       // Claude Code with the gifmate mod draws the GIF from these lines. Other clients (Codex, Cursor, ...)
@@ -246,6 +243,28 @@ server.registerTool(
           { type: "text", text: `GIF ready. Put this line in your reply, on its own, so the user sees it:\n${image}\nSaved locally at ${file}.${guide}` },
         ],
       };
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
+server.registerTool(
+  "gif_pick",
+  {
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    description:
+      "For GIF pickers (the gifmate tray): prepares the GIF the USER picked to send you, and writes it to their diary. Never call it yourself: to send a GIF, use gif_send.",
+    inputSchema: {
+      source: z.string().describe("GIF URL or local path"),
+      title: z.string().optional().describe("The GIF's title"),
+    },
+  },
+  async ({ source, title }) => {
+    try {
+      const { file } = await saveGif(await loadBytes(source));
+      await note({ kind: "user_gif", client: clientName(), gif: title || source, note: "picked in the tray" });
+      return { content: [{ type: "text", text: `gifmate-sent: ${file}` }] };
     } catch (err) {
       return fail(err);
     }
@@ -281,16 +300,16 @@ server.registerTool(
   {
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description:
-      "What you know about how GIFs land with this user, from their local reaction diary: mode (taratura = you still ask if a GIF fit; solo = you only watch reactions, never ask), today's count and pace, what worked per moment, their stated preferences, GIFs already overused. Read it before choosing a GIF to send. Also the user's commands: '/gif modo taratura' or '/gif modo solo' (set mode), '/gif profilo' (show them, in plain words, what you learned), '/gif dimentica' (forget = true, erases the diary).",
+      "What you know about how GIFs land with this user, from their local reaction diary: mode (calibrate = you still ask if a GIF fit; quiet = you only watch reactions, never ask), today's count and pace, what worked per moment, their stated preferences, GIFs already overused. Read it before choosing a GIF to send. Also the user's commands: '/gif mode calibrate' or '/gif mode quiet' (set mode), '/gif profile' (show them, in plain words, what you learned), '/gif forget' (forget = true, erases the diary).",
     inputSchema: {
-      mode: z.enum(["taratura", "solo"]).optional().describe("Set the mode (the user's command)"),
-      forget: z.boolean().optional().describe("Erase the whole diary (the user's command /gif dimentica)"),
+      mode: z.enum(["calibrate", "quiet"]).optional().describe("Set the mode (the user's command)"),
+      forget: z.boolean().optional().describe("Erase the whole diary (the user's command /gif forget)"),
     },
   },
   async ({ mode, forget: erase }) => {
     if (erase) {
       await forget();
-      return { content: [{ type: "text", text: "Diary erased: you start from zero, in taratura mode." }] };
+      return { content: [{ type: "text", text: "Diary erased: you start from zero, in calibrate mode." }] };
     }
     if (mode) await note({ kind: "mode", mode, note: "set by the user" });
     const p = profile(await readDiary());

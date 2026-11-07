@@ -1,6 +1,6 @@
 {
   "name": "gifmate",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Trade GIFs with Claude like with a teammate: a GIPHY tray in the chat (/gif), GIFs played inline, and GIFs read as messages.",
   "license": "MIT",
   "mcpServers": {

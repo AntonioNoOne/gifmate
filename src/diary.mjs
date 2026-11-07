@@ -16,9 +16,9 @@ const STRESS_MIN = 60; // a bitter or frustrated GIF of theirs keeps yours away 
 
 export const COOLDOWN_MIN = 30; // between two GIFs of the agent
 export const DAILY_CAP = 4;
-const SOLO = { sent: 5, days: 3, moments: 2, reactions: 3 }; // enough to stop asking (Codex review, 2026-11-07)
+const QUIET = { sent: 5, days: 3, moments: 2, reactions: 3 }; // enough to stop asking (Codex review, 2026-11-07)
 
-export const diaryPath = () => join(dirname(configPath()), "diario.jsonl");
+export const diaryPath = () => join(dirname(configPath()), "diary.jsonl");
 
 export async function readDiary(file = diaryPath()) {
   try {
@@ -47,7 +47,7 @@ const day = (t) => t.slice(0, 10);
 export function profile(rows, now = new Date()) {
   const sent = rows.filter((r) => r.kind === "sent");
   const reactions = rows.filter((r) => r.kind === "reaction");
-  const mode = rows.filter((r) => r.kind === "mode").at(-1)?.mode ?? "taratura";
+  const mode = rows.filter((r) => r.kind === "mode").at(-1)?.mode ?? "calibrate";
   const today = sent.filter((r) => day(r.t) === day(now.toISOString())).length;
   const last = sent.at(-1);
   const wait = last ? Math.max(0, COOLDOWN_MIN - (now - new Date(last.t)) / 60_000) : 0;
@@ -63,19 +63,19 @@ export function profile(rows, now = new Date()) {
   const stressed = lastSour ? (now - new Date(lastSour.t)) / 60_000 < STRESS_MIN : false;
   const clear = [...reactions.filter((r) => r.strength !== "weak"), ...rows.filter((r) => r.kind === "missed" || r.kind === "user_gif")];
   const ready =
-    sent.length >= SOLO.sent &&
-    new Set(sent.map((r) => day(r.t))).size >= SOLO.days &&
-    new Set(sent.map((r) => r.moment)).size >= SOLO.moments &&
-    clear.length >= SOLO.reactions &&
+    sent.length >= QUIET.sent &&
+    new Set(sent.map((r) => day(r.t))).size >= QUIET.days &&
+    new Set(sent.map((r) => r.moment)).size >= QUIET.moments &&
+    clear.length >= QUIET.reactions &&
     !reactions.slice(-3).some((r) => r.outcome === "negative");
   return {
     mode,
-    readyForSolo: mode === "taratura" && ready,
+    readyForQuiet: mode === "calibrate" && ready,
     today: { sent: today, cap: DAILY_CAP },
     waitMinutes: Math.ceil(wait),
     lastMoment: last?.moment ?? null,
     sentTotal: sent.length,
-    calibrationDue: mode === "taratura" && sent.length % 3 === 0, // ask on the 1st, 4th, 7th... GIF
+    calibrationDue: mode === "calibrate" && sent.length % 3 === 0, // ask on the 1st, 4th, 7th... GIF
     firstEver: sent.length === 0,
     userStressed: stressed,
     reactionsByMoment: byMoment,

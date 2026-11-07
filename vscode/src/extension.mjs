@@ -8,6 +8,7 @@ import { randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
 import { searchGiphy } from "../../src/giphy.mjs";
 import { loadBytes, withCover } from "../../src/gif.mjs";
+import { note } from "../../src/diary.mjs";
 import { MIN_LENGTH, waitAfterTyping } from "../../mod/typing.ts";
 
 const ATTACH = "chatgpt.addFileToThread"; // the Codex extension's "Add File to Codex Chat"
@@ -57,7 +58,7 @@ class Picker {
 
   async search(query) {
     const seq = ++this.searches;
-    this.post({ type: "status", text: query ? `Cerco “${query}”…` : "Di tendenza…" });
+    this.post({ type: "status", text: query ? `Searching “${query}”…` : "Trending…" });
     try {
       const results = await searchGiphy(query, { limit: 12 });
       if (seq !== this.searches) return; // a newer search is on its way
@@ -66,8 +67,8 @@ class Picker {
         type: "results",
         items: results.map((r) => ({ title: r.title, preview: r.small })),
         status: results.length
-          ? `${query ? "" : "Di tendenza · "}clic su una GIF per allegarla alla chat · Powered by GIPHY`
-          : `Nessuna GIF per “${query}”.`,
+          ? `${query ? "" : "Trending · "}click a GIF to send it to the chat · Powered by GIPHY`
+          : `No GIF for “${query}”.`,
       });
     } catch (err) {
       this.post({ type: "status", text: String(err.message || err) });
@@ -76,7 +77,7 @@ class Picker {
 
   async pick(result) {
     if (!result) return;
-    this.post({ type: "status", text: `Allego “${result.title}”…` });
+    this.post({ type: "status", text: `Sending “${result.title}”…` });
     try {
       const dir = join(tmpdir(), "gifmate", "picked");
       await mkdir(dir, { recursive: true });
@@ -89,6 +90,7 @@ class Picker {
         covered = withCover(bytes); // the model sees the middle frame of a pasted GIF, not its first one
       } catch {}
       await writeFile(file, covered);
+      void note({ kind: "user_gif", client: "gifmate-panel", gif: result.title, note: "picked in the panel" }).catch(() => {});
       // Codex draws an attached file as a name chip only; a pasted image file it draws as an image.
       // So the GIF also goes to the clipboard as a file, for Ctrl+V into the message.
       const copied = await copyFile(file);
@@ -98,16 +100,16 @@ class Picker {
         await vscode.commands.executeCommand(OPEN_CODEX);
         await new Promise((r) => setTimeout(r, 400));
         await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
-        this.post({ type: "status", text: "Incollata nella chat di Codex (se non la vedi: Ctrl+V)" });
+        this.post({ type: "status", text: "Pasted in the Codex chat (not there? press Ctrl+V)" });
       } else if (commands.includes(ATTACH)) {
         await vscode.commands.executeCommand(ATTACH, vscode.Uri.file(file));
-        this.post({ type: "status", text: "Allegata alla chat di Codex" });
+        this.post({ type: "status", text: "Attached to the Codex chat" });
       } else {
         if (!copied) await vscode.env.clipboard.writeText(file);
-        this.post({ type: "status", text: copied ? "GIF copiata: Ctrl+V nella chat" : "Percorso della GIF copiato, incollalo nella chat" });
+        this.post({ type: "status", text: copied ? "GIF copied: press Ctrl+V in the chat" : "GIF path copied: paste it in the chat" });
       }
     } catch (err) {
-      this.post({ type: "status", text: `Non sono riuscito ad allegarla: ${String(err.message || err)}` });
+      this.post({ type: "status", text: `Could not send it: ${String(err.message || err)}` });
     }
   }
 }
@@ -136,7 +138,7 @@ function page(nonce) {
   #grid img { height: 100px; border-radius: 6px; cursor: pointer; transition: transform .1s, outline-color .1s; outline: 2px solid transparent; }
   #grid img:hover { transform: scale(1.04); outline-color: var(--vscode-focusBorder); }
 </style></head><body>
-<input id="q" placeholder="Cerca una GIF… (anche in italiano)" autofocus>
+<input id="q" placeholder="Search a GIF…" autofocus>
 <div id="status"></div><div id="grid"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();

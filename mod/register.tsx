@@ -63,7 +63,7 @@ async function svgOf($: any, path: string | undefined): Promise<string> {
 // One search, shared by `/gif <what>` and the tray's own search box.
 let lastSearch = 0
 async function search($: any, query: string) {
-  let status = query ? `Cerco “${query}”…` : 'Di tendenza su GIPHY…'
+  let status = query ? `Searching “${query}”…` : 'Trending on GIPHY…'
   let picks: GifmatePick[] = []
   const seq = ++lastSearch
   // keep the current row while searching: emptying it made the GIFs blink at every pause in typing
@@ -71,7 +71,7 @@ async function search($: any, query: string) {
   // an empty search shows what is trending, so the tray is never empty while you type
   const tool = await toolNamed($, '__gif_search')
   if (!tool) {
-    status = 'gifmate non è collegato in questa sessione.'
+    status = 'gifmate is not connected in this session.'
   } else {
     try {
       const { text } = await $.tool.call({ tool, query, limit: 6, thumbs: true })
@@ -81,14 +81,14 @@ async function search($: any, query: string) {
       status = picks.length
         ? query
           ? 'Powered by GIPHY'
-          : 'Di tendenza · scrivi per cercare, anche in italiano · Powered by GIPHY'
+          : 'Trending · type to search · Powered by GIPHY'
         : /limit reached/i.test(body)
-          ? "Limite di GIPHY raggiunto: la chiave gratuita fa 100 ricerche l'ora. Riprova fra poco."
+          ? 'GIPHY limit reached: a free key allows 100 searches an hour. Try again in a while.'
           : /No GIF found/i.test(body)
-            ? `Nessuna GIF per “${query}”. Prova un'altra parola.`
-            : `Ricerca non riuscita: ${body}`
+            ? `No GIF for “${query}”. Try another word.`
+            : `Search failed: ${body}`
     } catch (err) {
-      status = `Ricerca non riuscita: ${String(err)}`
+      status = `Search failed: ${String(err)}`
     }
   }
   // a slower, older search must not overwrite the newer one
@@ -167,7 +167,7 @@ export const register: Register = on => {
     const text = typeof e.props.output === 'string' ? e.props.output : JSON.stringify(e.props.output ?? '')
     const m = /(\d+) frames, ([\d.]+) s/.exec(text)
     const { Box, Text } = $.ui.resolve(e)
-    const line = <Text dimColor>👀 GIF guardata{m ? ` · ${m[1]} fotogrammi · ${Number(m[2]).toFixed(1)} s` : ''}</Text>
+    const line = <Text dimColor>👀 GIF watched{m ? ` · ${m[1]} frames · ${Number(m[2]).toFixed(1)} s` : ''}</Text>
     // a GIF sent from the tray has its animation next to it: show what was watched
     const source = String((e.props.input as { source?: string })?.source ?? '')
     const svg = e.surface === 'terminal' || !/\.gif$/i.test(source) ? '' : await svgOf($, source.replace(/\.gif$/i, '.svg'))
@@ -202,14 +202,15 @@ export const register: Register = on => {
     if (!isOpen) return next(e)
     const close = () => update($, picker, v => ({ ...CLOSED, attached: v.attached }))
     const { Svg } = $.ui.resolve(e) as { Svg?: any }
-    // Manda sends the GIF now; Allega keeps it for the next message, sent when the person presses Enter
+    // Send sends the GIF now; Attach keeps it for the next message, sent when the person presses Enter.
+    // The user's own pick goes through gif_pick: gif_send is the agent's, with its pace and its diary entries.
     const prepare = async (p: GifmatePick) => {
-      const sendTool = await toolNamed($, '__gif_send')
-      const { text } = sendTool ? await $.tool.call({ tool: sendTool, source: p.gif } as any) : { text: '' }
+      const pickTool = await toolNamed($, '__gif_pick')
+      const { text } = pickTool ? await $.tool.call({ tool: pickTool, source: p.gif, title: p.title } as any) : { text: '' }
       const file = pathFrom(text, SENT)
       return file ? { title: p.title, file } : null
     }
-    // Invia: now. One GIF per press: the first press closes the tray, the later ones find nothing to send.
+    // Send: now. One GIF per press: the first press closes the tray, the later ones find nothing to send.
     const sendNow = async (p: GifmatePick) => {
       let isFirst = false
       await update($, picker, v => {
@@ -219,12 +220,12 @@ export const register: Register = on => {
       const gif = isFirst ? await prepare(p) : null
       if (gif) await $.prompt.submit({ text: gifMessage('', gif), asUser: true })
     }
-    // Allega: the tray stays open; the GIF leaves with the next message, when the person presses Enter.
+    // Attach: the tray stays open; the GIF leaves with the next message, when the person presses Enter.
     const attach = async (p: GifmatePick) => {
-      await update($, picker, v => ({ ...v, status: `Allego “${p.title}”…` }))
+      await update($, picker, v => ({ ...v, status: `Attaching “${p.title}”…` }))
       const gif = await prepare(p)
       await update($, picker, v =>
-        gif ? { ...v, attached: gif, status: 'Allegata: scrivi il messaggio e premi Invio' } : { ...v, status: 'Non sono riuscito ad allegarla' },
+        gif ? { ...v, attached: gif, status: 'Attached: write your message and press Enter' } : { ...v, status: 'Could not attach it' },
       )
     }
     const cards = await Promise.all(
@@ -240,11 +241,11 @@ export const register: Register = on => {
               <Text dimColor>⏳</Text>
             )}
             <Box flexDirection="row" gap={1}>
-              <Button key={`send-${i}`} label="➤ Invia" plain onPress={() => sendNow(p)} />
+              <Button key={`send-${i}`} label="➤ Send" plain onPress={() => sendNow(p)} />
               {attached?.title === p.title ? (
-                <Text>✓ Allegata</Text>
+                <Text>✓ Attached</Text>
               ) : (
-                <Button key={`attach-${i}`} label="📎 Allega" plain dimColor onPress={() => attach(p)} />
+                <Button key={`attach-${i}`} label="📎 Attach" plain dimColor onPress={() => attach(p)} />
               )}
             </Box>
           </Box>
@@ -254,7 +255,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" gap={1}>
-          <Input key="gif-query" placeholder="Cerca una GIF…" submitLabel="Cerca" autoFocus onInput={(q: string) => searchWhileTyping($, q)} onSubmit={(q: string) => searchNow($, q)} />
+          <Input key="gif-query" placeholder="Search a GIF…" submitLabel="Search" autoFocus onInput={(q: string) => searchWhileTyping($, q)} onSubmit={(q: string) => searchNow($, q)} />
           <Button key="gif-close" label="✕" plain dimColor role="dismiss" onPress={close} />
         </Box>
         <Text dimColor>{status}</Text>
@@ -292,9 +293,9 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     if (e.command && /^(gifmate:)?gif$/.test(e.command.name)) {
       const args = e.command.args.trim()
-      // /gif modo|profilo|dimentica: commands for the reaction diary, answered by the agent with gif_profile
-      if (/^(modo|profilo|dimentica)\b/i.test(args)) {
-        // a command's text cannot be rewritten: drop it and send the request as a message (as Invia does)
+      // /gif mode|profile|forget: commands for the reaction diary, answered by the agent with gif_profile
+      if (/^(mode|profile|forget)\b/i.test(args)) {
+        // a command's text cannot be rewritten: drop it and send the request as a message (as Send does)
         void $.prompt.submit({ text: `gifmate ${args}: call gif_profile for it and answer in one or two lines.`, asUser: true })
         return { drop: `gifmate: ${args}` }
       }
@@ -332,7 +333,9 @@ export const register: Register = on => {
         `Only if the title is not enough to get the meaning, glance at it with gifmate's gif_view on ${reply[3]} with max_frames 3.`
       return sent({ ...e, context: [...(e.context ?? []), note] })
     }
-    const refs = [...new Set(e.text.match(GIF_REF) ?? [])]
+    // GIF names inside blocks a tool or a hook added to the prompt (<browser_instruction>...) are not the user's
+    const own = e.text.replace(/<([a-z_][\w-]*)>[\s\S]*?<\/\1>/gi, ' ')
+    const refs = [...new Set(own.match(GIF_REF) ?? [])]
     const pasted = (e.attachments ?? []).filter(a => a.mediaType === 'image/gif')
     if (!refs.length && !pasted.length) return sent(e)
     const notes = refs.map(

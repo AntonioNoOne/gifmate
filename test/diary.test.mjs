@@ -19,21 +19,21 @@ test("pace: 30 minutes between GIFs, 4 a day; asked and banter have their own ru
   assert.equal(gate(profile(four, new Date("2026-11-08T09:00:00Z")), "bug_fixed"), null);
 });
 
-test("taratura asks on the 1st, 4th, 7th GIF; switches to solo only with enough clear signal", () => {
+test("calibrate asks on the 1st, 4th, 7th GIF; switches to quiet only with enough clear signal", () => {
   assert.equal(profile([]).calibrationDue, true);
   const rows = [
     sent("2026-11-05T10:00:00Z"), sent("2026-11-05T15:00:00Z", "bug_fixed"),
     sent("2026-11-06T10:00:00Z"), sent("2026-11-06T15:00:00Z"), sent("2026-11-07T10:00:00Z", "bug_fixed"),
   ];
-  assert.equal(profile(rows).readyForSolo, false); // no reactions yet
+  assert.equal(profile(rows).readyForQuiet, false); // no reactions yet
   const reacted = [...rows, ...[1, 2].map(() => at("2026-11-07T11:00:00Z", { kind: "reaction", outcome: "positive", strength: "strong" }))];
-  assert.equal(profile(reacted).readyForSolo, false);
+  assert.equal(profile(reacted).readyForQuiet, false);
   const missed = [...reacted, at("2026-11-07T12:00:00Z", { kind: "missed", moment: "bug_fixed" })];
-  assert.equal(profile(missed).readyForSolo, true);
+  assert.equal(profile(missed).readyForQuiet, true);
   assert.deepEqual(profile(missed).missedByMoment, { bug_fixed: 1 });
   const annoyed = [...missed, at("2026-11-07T13:00:00Z", { kind: "reaction", outcome: "negative", strength: "strong" })];
-  assert.equal(profile(annoyed).readyForSolo, false);
-  assert.equal(profile([...missed, at("2026-11-07T13:00:00Z", { kind: "mode", mode: "solo" })]).mode, "solo");
+  assert.equal(profile(annoyed).readyForQuiet, false);
+  assert.equal(profile([...missed, at("2026-11-07T13:00:00Z", { kind: "mode", mode: "quiet" })]).mode, "quiet");
 });
 
 test("in tune: the user's own GIFs tell which feeling each kind of moment gives them", () => {
@@ -60,7 +60,7 @@ test("a bitter GIF of theirs is no example: it keeps the agent's GIFs away for a
 });
 
 test("the diary keeps labels short and forgets on request", async () => {
-  const file = join(await mkdtemp(join(tmpdir(), "gifmate-")), "diario.jsonl");
+  const file = join(await mkdtemp(join(tmpdir(), "gifmate-")), "diary.jsonl");
   await note({ kind: "lesson", note: "x".repeat(500) }, file);
   assert.equal((await readDiary(file))[0].note.length, 140);
   assert.match(await readFile(file, "utf-8"), /"kind":"lesson"/);
