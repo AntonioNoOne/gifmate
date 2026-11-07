@@ -5,10 +5,14 @@ import { dirname, join } from "node:path";
 import { configPath } from "./config.mjs";
 
 export const MOMENTS = ["task_done", "bug_fixed", "our_mistake_fixed", "good_news", "kickoff", "signoff", "banter", "asked"];
-export const EFFORTS = ["trivial", "normal", "hours", "days"];
-export const CAUSES = ["agent", "user", "external", "unknown"];
-// The same moment is not the same moment: a trivial bug of yours is not the one that hunted you for days.
-const situation = (r) => [r.moment ?? "?", r.effort, r.cause].filter(Boolean).join("/");
+// The same moment is not the same moment: what it cost tells them apart (Codex review of 10 cases, 2026-11-07).
+// Two values only, so the diary fills up instead of scattering one example per box.
+export const INTENSITIES = ["ordinary", "hard_won"];
+// Each brake silences the GIF on its own: a slip of yours, a user under stress, a sensitive context.
+export const BRAKES = ["own_fault", "user_stressed", "sensitive"];
+export const TONES = ["positive", "playful", "bitter", "frustrated"]; // of a GIF the user sends
+const situation = (r) => [r.moment ?? "?", r.intensity].filter(Boolean).join("/");
+const STRESS_MIN = 60; // a bitter or frustrated GIF of theirs keeps yours away this long
 
 export const COOLDOWN_MIN = 30; // between two GIFs of the agent
 export const DAILY_CAP = 4;
@@ -54,6 +58,9 @@ export function profile(rows, now = new Date()) {
     const m = (byMoment[situation(r)] ??= { positive: 0, negative: 0, neutral: 0 });
     m[r.outcome] = (m[r.outcome] ?? 0) + 1;
   }
+  // their bitter or frustrated GIF is no example to copy: it says to keep quiet for a while
+  const lastSour = rows.filter((r) => r.kind === "user_gif" && (r.tone === "bitter" || r.tone === "frustrated")).at(-1);
+  const stressed = lastSour ? (now - new Date(lastSour.t)) / 60_000 < STRESS_MIN : false;
   const clear = [...reactions.filter((r) => r.strength !== "weak"), ...rows.filter((r) => r.kind === "missed" || r.kind === "user_gif")];
   const ready =
     sent.length >= SOLO.sent &&
@@ -70,8 +77,9 @@ export function profile(rows, now = new Date()) {
     sentTotal: sent.length,
     calibrationDue: mode === "taratura" && sent.length % 3 === 0, // ask on the 1st, 4th, 7th... GIF
     firstEver: sent.length === 0,
+    userStressed: stressed,
     reactionsByMoment: byMoment,
-    // in tune: what the user felt (their own GIF) after each kind of message of yours; send that feeling first next time
+    // in tune: what the user felt (their own positive or playful GIF) after each kind of message of yours: send that first next time
     inTune: tune(rows),
     missedByMoment: rows.filter((r) => r.kind === "missed").reduce((m, r) => ({ ...m, [situation(r)]: (m[situation(r)] ?? 0) + 1 }), {}),
     lessons: rows.filter((r) => r.kind === "lesson").slice(-20).map((r) => r.note),
@@ -80,11 +88,11 @@ export function profile(rows, now = new Date()) {
   };
 }
 
-// situation -> feelings their GIFs showed, most frequent first: { "bug_fixed/days/external": ["lets go (2)", "relief (1)"] }
+// situation -> feelings their positive or playful GIFs showed, most frequent first: { "bug_fixed/hard_won": ["lets go (2)", "relief (1)"] }
 function tune(rows) {
   const by = {};
   for (const r of rows) {
-    if (r.kind !== "user_gif" || !r.feeling) continue;
+    if (r.kind !== "user_gif" || !r.feeling || r.tone === "bitter" || r.tone === "frustrated") continue;
     const m = (by[situation(r)] ??= {});
     m[r.feeling] = (m[r.feeling] ?? 0) + 1;
   }
@@ -94,10 +102,14 @@ function tune(rows) {
 }
 
 // May the agent send a GIF now? null = yes, else the reason in one line.
-export function gate(p, moment, { effort, cause } = {}) {
+export function gate(p, moment, { brakes = [] } = {}) {
   if (moment === "asked") return null; // the user asked for one
-  if (cause === "agent" && effort === "trivial" && moment !== "banter")
-    return "No GIF for fixing a trivial slip of your own: nothing to celebrate. Answer with words, a light self-ironic line at most.";
+  if (brakes.includes("sensitive")) return "No GIF: security, data, money, a client or production are at stake. Answer with words.";
+  if (brakes.includes("user_stressed") || (p.userStressed && moment !== "banter"))
+    return "No GIF: the user is under stress (rushed, frustrated, the same bug back again). Acknowledge it and act, in words.";
+  // a slip of yours: words and responsibility, unless they are the one joking about it
+  if (brakes.includes("own_fault") && moment !== "banter")
+    return "No GIF for fixing a slip of your own: nothing to celebrate. Answer with words, a light self-ironic line at most.";
   if (p.today.sent >= p.today.cap) return `Not today: ${p.today.sent} GIFs already (cap ${p.today.cap}). Answer with words.`;
   if (p.waitMinutes > 0 && moment !== "banter") return `Not now: your last GIF was less than ${COOLDOWN_MIN} minutes ago (${p.waitMinutes} min to wait). Answer with words.`;
   return null;

@@ -328,7 +328,7 @@ export const register: Register = on => {
           : `The user answered with a GIF instead of words. Its GIPHY title: «${reply[2]}». `) +
         'Treat it as their message: read what they mean (GIFs are often ironic or a reaction to your last reply) and act on it, ' +
         'as a teammate would, in their language. Do not describe the GIF, and answer with words, not with a GIF of your own. ' +
-        "Your last message made them feel this: record it with gifmate's gif_note (kind user_gif, moment = what your last message was, effort and cause = how hard and whose problem it was, feeling = the feeling in 1-3 English words), so next time you can be the one in tune. " +
+        "Your last message made them feel this: record it with gifmate's gif_note (kind user_gif, moment and intensity of your last message, feeling in 1-3 English words, tone: positive, playful, bitter or frustrated), so next time you can be the one in tune. " +
         `Only if the title is not enough to get the meaning, glance at it with gifmate's gif_view on ${reply[3]} with max_frames 3.`
       return sent({ ...e, context: [...(e.context ?? []), note] })
     }

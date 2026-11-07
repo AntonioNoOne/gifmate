@@ -97,8 +97,12 @@ It saves the key in your user config (`%APPDATA%\gifmate\config.json` on Windows
 Every GIF you trade goes into a small local **reaction diary**: the moment (task done, bug fixed...), the GIF's
 title, how it landed. From it the agent learns when GIFs work with you, which humour you like, which GIFs it
 overused. Above all, **your own GIFs teach it to be in tune**: a GIF you send is how its last message made
-you feel, so the next time that kind of moment comes (a bug fixed after an hour, a task done), it sends you
-that feeling first.
+you feel, so the next time that kind of moment comes, it sends you that feeling first. Only your positive or
+playful GIFs count as examples; a bitter "this is fine" is your mood, and keeps its GIFs away for an hour.
+
+The situation decides, not the label: a bug hunted for days (hard-won) is not a quick one (ordinary), and three
+brakes stop any GIF: a slip of the agent's own, you under stress, a sensitive context (security, data, money,
+a client, production).
 
 - **Taratura** (the start): after some of its GIFs the agent asks, in one line, if it fit.
 - **Solo GIF**: once it has enough clear signal (5 GIFs over 3 days, 3 clear reactions, no recent "no") it

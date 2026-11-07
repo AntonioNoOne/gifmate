@@ -41,14 +41,22 @@ test("in tune: the user's own GIFs tell which feeling each kind of moment gives 
   assert.deepEqual(profile(rows).inTune, { bug_fixed: ["lets go (2)", "relief (1)"] });
 });
 
-test("the same moment is not the same situation: effort and cause keep them apart", () => {
+test("the situation: intensity tells moments apart, each brake silences the GIF", () => {
   const rows = [
-    at("2026-11-07T10:00:00Z", { kind: "user_gif", moment: "bug_fixed", effort: "days", cause: "external", feeling: "finally" }),
-    at("2026-11-07T11:00:00Z", { kind: "user_gif", moment: "bug_fixed", effort: "trivial", cause: "agent", feeling: "facepalm" }),
+    at("2026-11-07T10:00:00Z", { kind: "user_gif", moment: "bug_fixed", intensity: "hard_won", feeling: "finally", tone: "positive" }),
+    at("2026-11-07T11:00:00Z", { kind: "user_gif", moment: "task_done", intensity: "ordinary", feeling: "party", tone: "playful" }),
   ];
-  assert.deepEqual(profile(rows).inTune, { "bug_fixed/days/external": ["finally (1)"], "bug_fixed/trivial/agent": ["facepalm (1)"] });
-  assert.match(gate(profile([]), "bug_fixed", { effort: "trivial", cause: "agent" }), /No GIF/);
-  assert.equal(gate(profile([]), "bug_fixed", { effort: "days", cause: "external" }), null);
+  assert.deepEqual(profile(rows).inTune, { "bug_fixed/hard_won": ["finally (1)"], "task_done/ordinary": ["party (1)"] });
+  for (const brake of ["own_fault", "user_stressed", "sensitive"]) assert.match(gate(profile([]), "bug_fixed", { brakes: [brake] }), /No GIF/);
+  assert.equal(gate(profile([]), "banter", { brakes: ["own_fault"] }), null); // they joke about it: play along
+  assert.equal(gate(profile([]), "asked", { brakes: ["sensitive"] }), null);
+});
+
+test("a bitter GIF of theirs is no example: it keeps the agent's GIFs away for an hour", () => {
+  const sour = at("2026-11-07T10:00:00Z", { kind: "user_gif", moment: "bug_fixed", feeling: "this is fine", tone: "bitter" });
+  assert.deepEqual(profile([sour]).inTune, {});
+  assert.match(gate(profile([sour], new Date("2026-11-07T10:30:00Z")), "task_done"), /under stress/);
+  assert.equal(gate(profile([sour], new Date("2026-11-07T11:30:00Z")), "task_done"), null);
 });
 
 test("the diary keeps labels short and forgets on request", async () => {

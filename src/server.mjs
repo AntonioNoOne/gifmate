@@ -12,7 +12,7 @@ import { Worker } from "node:worker_threads";
 import { framesOf, loadBytes, stillSvg } from "./gif.mjs";
 import { searchGiphy } from "./giphy.mjs";
 import { GIF_RULES } from "./rules.mjs";
-import { CAUSES, EFFORTS, MOMENTS, diaryPath, forget, gate, note, profile, readDiary } from "./diary.mjs";
+import { BRAKES, INTENSITIES, MOMENTS, TONES, diaryPath, forget, gate, note, profile, readDiary } from "./diary.mjs";
 
 if (process.argv[2] === "setup") {
   const { createInterface } = await import("node:readline/promises");
@@ -199,28 +199,28 @@ server.registerTool(
   {
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     description:
-      "Send a GIF to the user in the chat. Pass the `gif` URL of a gif_search result (or any GIF URL or local path) and the moment it marks, with how hard it was and whose problem it was: the same moment is not the same moment (a trivial slip of yours, fixed, is no win to celebrate; a bug that hunted you both for days is). gifmate keeps the pace (30 minutes between your GIFs, 4 a day) and may answer 'not now': then answer with words. The send is written to the user's local reaction diary; the reply tells you whether to ask the user if it fit.",
+      "Send a GIF to the user in the chat. Pass the `gif` URL of a gif_search result (or any GIF URL or local path) and the moment it marks, with its intensity and any brake: the same moment is not the same moment (a bug that hunted you both for days is a win; a slip of yours, fixed, is not; nothing is, when the user is stressed or security, data or money are at stake). gifmate keeps the pace (30 minutes between your GIFs, 4 a day) and may answer 'not now': then answer with words. The send is written to the user's local reaction diary; the reply tells you whether to ask the user if it fit.",
     inputSchema: {
       source: z.string().describe("GIF URL or local path"),
       moment: z.enum(MOMENTS).describe("What the GIF marks: asked = the user asked you for one; banter = answering their playful GIF"),
-      effort: z.enum(EFFORTS).optional().describe("How hard it was: a quick fix is not a hunt that took hours or days"),
-      cause: z.enum(CAUSES).optional().describe("Whose problem it was: agent = a slip of yours, external = a library, a service, the platform"),
+      intensity: z.enum(INTENSITIES).describe("ordinary, or hard_won: it took real effort (a bug hunted for hours or days, a long refactor done)"),
+      brakes: z.array(z.enum(BRAKES)).default([]).describe("Any that apply: own_fault = the problem was a slip of yours; user_stressed = they are rushed, frustrated, or it is the same bug back again; sensitive = security, data, money, a client, production"),
       title: z.string().optional().describe("The GIF's title (from gif_search)"),
       caption: z.string().optional().describe("Short caption shown with the GIF"),
     },
   },
-  async ({ source, moment, effort, cause, title, caption }) => {
+  async ({ source, moment, intensity, brakes, title, caption }) => {
     try {
       const rows = await readDiary();
       const before = profile(rows);
-      const refused = gate(before, moment, { effort, cause });
+      const refused = gate(before, moment, { brakes });
       if (refused) return { content: [{ type: "text", text: refused }] };
       const { file, svgFile } = await saveGif(await loadBytes(source));
-      await note({ kind: "sent", client: clientName(), moment, effort, cause, gif: title || caption || source });
+      await note({ kind: "sent", client: clientName(), moment, intensity, brakes, gif: title || caption || source });
       const after = [];
       if (before.firstEver) {
         after.push(
-          "First GIF with this user: after it, ask in one short message two setup questions (GIFs also after your own mistakes, once fixed? which humour: light, ironic, none?) and record each answer with gif_note kind lesson.",
+          "First GIF with this user: after it, ask in one short message two setup questions (which humour: light, ironic, none? GIFs rarely, or at every real win?) and record each answer with gif_note kind lesson.",
         );
       } else if (before.calibrationDue) {
         after.push("Calibration: end your reply with one short line asking if the GIF fit (👍/👎); record the answer with gif_note kind reaction.");
@@ -257,12 +257,12 @@ server.registerTool(
   {
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     description:
-      "Write to the user's local GIF reaction diary, so you get to know them. Call it: after the user reacts to one of your GIFs (kind reaction: a GIF back or a clear yes/no is strong, 'ahah' or an emoji medium, silence or a topic change weak and never negative); when they tell you a preference about GIFs or humour (kind lesson, in their words, short); when they send you a GIF (kind user_gif): your last message made them feel it, so it shows how to be in tune with them - record what that message was (moment) and the feeling their GIF shows (feeling); next time you mark that kind of moment, that is the GIF to send them first. When they say a GIF would have fit: kind missed, with the moment. Labels only: never copy the conversation.",
+      "Write to the user's local GIF reaction diary, so you get to know them. Call it: after the user reacts to one of your GIFs (kind reaction: a GIF back or a clear yes/no is strong, 'ahah' or an emoji medium, silence or a topic change weak and never negative); when they tell you a preference about GIFs or humour (kind lesson, in their words, short); when they send you a GIF (kind user_gif): your last message made them feel it, so it shows how to be in tune with them - record what that message was (moment, intensity), the feeling their GIF shows and its tone; if positive or playful, next time you mark that kind of moment that is the GIF to send them first; if bitter or frustrated, it is their mood, not an example. When they say a GIF would have fit: kind missed, with the moment. Labels only: never copy the conversation.",
     inputSchema: {
       kind: z.enum(["reaction", "lesson", "user_gif", "missed"]),
       moment: z.enum(MOMENTS).optional().describe("The moment the note refers to; for user_gif: what your previous message was"),
-      effort: z.enum(EFFORTS).optional().describe("How hard that moment was (trivial, normal, hours, days)"),
-      cause: z.enum(CAUSES).optional().describe("Whose problem it was"),
+      intensity: z.enum(INTENSITIES).optional().describe("ordinary or hard_won (it took real effort)"),
+      tone: z.enum(TONES).optional().describe("user_gif: positive or playful = an example to send them next time; bitter or frustrated (a sour 'this is fine', sarcasm at you) = no example, it tells you to keep your GIFs away for a while"),
       feeling: z.string().max(40).optional().describe("user_gif: the feeling their GIF shows, 1-3 English words ('lets go', 'facepalm', 'relief')"),
       outcome: z.enum(["positive", "negative", "neutral"]).optional(),
       strength: z.enum(["strong", "medium", "weak"]).optional(),
