@@ -1,6 +1,6 @@
 {
   "name": "gifmate",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Trade GIFs with your coding agent: watch animated GIFs frame by frame, search and send GIFs from GIPHY.",
   "mcpServers": {
     "gifmate": {

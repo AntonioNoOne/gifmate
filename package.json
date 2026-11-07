@@ -1,6 +1,6 @@
 {
   "name": "gifmate",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Trade GIFs with your coding agent: it watches animated GIFs frame by frame and sends GIFs from GIPHY. MCP server for Claude Code, Codex, Cursor, VS Code, Gemini CLI; plus a Claude Code plugin with an in-chat GIF tray.",
   "type": "module",
   "bin": {

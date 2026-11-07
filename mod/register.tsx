@@ -383,7 +383,8 @@ export const register: Register = on => {
       // A submit from inside this hook is lost: the band above the prompt sends it, as Send does (see AbovePrompt).
       if (kept) {
         const text = gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept)
-        await update($, picker, v => ({ ...v, pending: { text, at: (await $.clock.now()) as number } }))
+        const at = (await $.clock.now()) as number
+        await update($, picker, v => ({ ...v, pending: { text, at } }))
         return { drop: 'gifmate: sending your GIF as a GIF card…' }
       }
     }
