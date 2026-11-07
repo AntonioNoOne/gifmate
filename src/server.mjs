@@ -102,6 +102,9 @@ let queue = Promise.resolve();
 let searches = 0;
 const later = (job, search) => (queue = queue.then(() => (search === searches ? job() : undefined)).catch(() => {}));
 
+// Claude Code presents itself as "claude-code", Codex as "codex-mcp-client" (checked 2026-11-07).
+const isClaude = () => /claude/i.test(server.server.getClientVersion()?.name ?? "");
+
 const fail = (err) => ({ isError: true, content: [{ type: "text", text: String(err.message || err) }] });
 
 server.registerTool(
@@ -162,9 +165,26 @@ server.registerTool(
             .catch(() => {});
         }
       }
-      const text = results.length
-        ? JSON.stringify(results, null, 2) + "\n\nPowered by GIPHY"
-        : `No GIF found for "${query}".`;
+      if (!results.length) return { content: [{ type: "text", text: `No GIF found for "${query}".` }] };
+      let text = JSON.stringify(results, null, 2) + "\n\nPowered by GIPHY";
+      // Clients without the Claude tray (Codex, Cursor...): a numbered gallery of local copies, which their chat
+      // draws (Codex blocks remote images, draws local ones), so the user can pick a GIF by its number.
+      if (!isClaude()) {
+        const dir = join(tmpdir(), "gifmate");
+        await mkdir(dir, { recursive: true });
+        const gallery = await Promise.all(
+          results.map(async (r, i) => {
+            try {
+              const file = join(dir, `${createHash("sha1").update(r.small).digest("hex").slice(0, 12)}-small.gif`);
+              await writeWhole(file, await loadBytes(r.small, { timeoutMs: 4000 }));
+              return `${i + 1}. ![${r.title.replace(/[[\]]/g, "")}](${pathToFileURL(file).href})`;
+            } catch {
+              return `${i + 1}. ${r.title}`;
+            }
+          }),
+        );
+        text += `\n\nGallery (numbered, for the user to pick from):\n${gallery.join("\n")}`;
+      }
       return { content: [{ type: "text", text }] };
     } catch (err) {
       return fail(err);
@@ -188,7 +208,7 @@ server.registerTool(
       const { file, svgFile } = await saveGif(await loadBytes(source));
       // Claude Code with the gifmate mod draws the GIF from these lines. Other clients (Codex, Cursor, ...)
       // have no mod: they get a markdown image to put in the reply, which their chat may draw or show as a link.
-      if (/claude/i.test(server.server.getClientVersion()?.name ?? "")) {
+      if (isClaude()) {
         const lines = [`gifmate-sent: ${file}`];
         if (svgFile) lines.push(`gifmate-svg: ${svgFile}`);
         if (caption) lines.push(caption);
