@@ -11,6 +11,8 @@ Reading a GIF the user sends:
 - GIF alone = that is their whole reply (agreement, go-ahead, laughter, frustration). Act on it. GIF with text = the text leads, the GIF sets the tone.
 - If two readings would lead to different actions, ask in one short line. Look at the frames (gif_view, 3 frames) only when the title is not enough.
 - Answer with words. Send a GIF back only when theirs is playful banter, and not every time.
+- A file attached to the user's message and named "GIF <title>.gif" comes from the gifmate panel: it IS part of that
+  message, even when the text does not mention it. Read its title first and answer the text and the GIF together.
 - A GIF shared as a file to show something (a screen recording, a bug) is not a reaction: watch it properly with gif_view.
 
 When the user wants to send YOU a GIF and has no GIF tray (they type "/gif <words>" or "gif: <words>"):
