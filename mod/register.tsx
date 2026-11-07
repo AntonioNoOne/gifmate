@@ -56,9 +56,6 @@ async function keepPasted($: any, id: string): Promise<GifmateAttached | null> {
   }
 }
 
-// GIF messages that reached the session (a re-sent paste is put back in the prompt box if it never does)
-const arrived = new Set<string>()
-
 // The gifmate tools by suffix: the prefix depends on how gifmate was installed. Listing every tool
 // on each keystroke slowed typing down, so the names are looked up once.
 const toolNames = new Map<string, string>()
@@ -225,25 +222,35 @@ export const register: Register = on => {
    try {
     const { isOpen, status, picks, attached, pending } = await read($, picker)
     const { Box, Text, Button, Input } = $.ui.resolve(e)
-    // a pasted GIF waiting to go out as a GIF message: sent from here, like Send. If it has not gone out within
-    // 8 s, it is put back in the prompt box, so the GIF is never lost: Enter sends it.
+    // A pasted GIF waits here, full size, with Send: drawing is pure (no writes, no submits), so it goes out from
+    // the button's handler, the same path as the tray's Send (2026-11-07: sending it from the hook or the drawing failed).
     if (pending) {
-      await update($, picker, v => ({ ...v, pending: null }))
-      const backInTheBox = () => (arrived.has(pending.text) ? undefined : $.prompt.fill({ text: pending.text, mode: 'replace' }))
-      if (((await $.clock.now()) as number) - pending.at < 8000) {
-        void $.prompt
-          .submit({ text: pending.text, asUser: true })
-          .then(() => $.clock.sleep(8000))
-          .then(backInTheBox, backInTheBox)
-      } else {
-        void backInTheBox()
+      const { Svg } = $.ui.resolve(e) as { Svg?: any }
+      const path = /\n(\S+\.gif)\s*$/.exec(pending.text)?.[1]
+      const svg = Svg && path ? await svgOf($, path.replace(/\.gif$/i, '.svg')) : ''
+      const send = async () => {
+        let text = ''
+        await update($, picker, v => {
+          text = v.pending?.text ?? ''
+          return { ...v, pending: null }
+        })
+        if (text) await $.prompt.submit({ text, asUser: true })
       }
+      return (
+        <Box flexDirection="column" gap={1}>
+          {svg ? sizedGif(Svg, svg) : <Text>🎞️ GIF ready</Text>}
+          <Box flexDirection="row" gap={1}>
+            <Button key="gif-pending-send" label="➤ Send" plain onPress={send} />
+            <Button key="gif-pending-drop" label="✕" plain dimColor role="dismiss" onPress={() => update($, picker, v => ({ ...v, pending: null }))} />
+          </Box>
+        </Box>
+      )
     }
     // tray closed with a GIF attached: a small chip until the next message takes it
     if (!isOpen && attached) {
       return (
         <Box flexDirection="row" gap={1}>
-          <Text>📎 GIF allegata: {attached.title}</Text>
+          <Text>📎 GIF attached: {attached.title}</Text>
           <Button key="gif-unattach" label="✕" plain dimColor onPress={() => update($, picker, v => ({ ...v, attached: null }))} />
         </Box>
       )
@@ -316,7 +323,7 @@ export const register: Register = on => {
    } catch (err) {
     // a tray that fails to draw says why, instead of silently not appearing
     const { Text } = $.ui.resolve(e)
-    return <Text color="red">gifmate: la fascia non si disegna: {String(err)}</Text>
+    return <Text color="red">gifmate: the GIF band could not be drawn: {String(err)}</Text>
    }
   })
 
@@ -385,13 +392,12 @@ export const register: Register = on => {
         const text = gifMessage(e.text.replace(/\[Image[^\]]*\]/g, '').trim(), kept)
         const at = (await $.clock.now()) as number
         await update($, picker, v => ({ ...v, pending: { text, at } }))
-        return { drop: 'gifmate: sending your GIF as a GIF card…' }
+        return { drop: 'gifmate: your GIF is above the prompt, press Send' }
       }
     }
     // A GIF sent from the tray is a message, like in any chat: its meaning, not its pixels.
     const reply = /^([\s\S]*?)\n?GIF: (.*)\n(\S+\.gif)\s*$/.exec(e.text)
     if (reply) {
-      arrived.add(e.text) // a pasted GIF re-sent from the band made it: no need to put it back in the box
       const note =
         (reply[1].trim()
           ? `The user wrote the text above and attached a GIF to set its tone. Its GIPHY title: «${reply[2]}». The text leads; the GIF says how they feel about it. `
