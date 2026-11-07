@@ -194,7 +194,8 @@ server.registerTool(
         if (caption) lines.push(caption);
         return { content: [{ type: "text", text: lines.join("\n") }] };
       }
-      const url = /^https?:\/\//i.test(source) ? source : pathToFileURL(file).href;
+      // the local copy, not the GIPHY URL: Codex's chat blocks remote images but draws local files (checked 2026-11-07)
+      const url = pathToFileURL(file).href;
       const image = `![${(caption || "GIF").replace(/[[\]]/g, "")}](${url})`;
       return {
         content: [
