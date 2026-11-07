@@ -15,13 +15,7 @@ import { MIN_LENGTH, waitAfterTyping } from "../../mod/typing.ts";
 // Found in the editors themselves (2026-11-07): the Codex extension, Antigravity's agent panel (Ctrl+L).
 const CHATS = [
   { id: "codex", label: "Codex", focus: ["chatgpt.openSidebar"], present: () => !!vscode.extensions.getExtension("openai.chatgpt") },
-  // Antigravity's built-in agent (its Gemini chat, Ctrl+L): which of its commands an extension may run is not
-  // documented, so the first that works wins
-  { id: "antigravity", label: "Antigravity agent (Gemini)", focus: ["antigravity.openChatView", "antigravity.toggleChatFocus", "antigravity.openAgent"],
-    // its chat takes no paste from an extension (and antigravity.addContext adds only text and file chips):
-    // open it, and the person's own Ctrl+V pastes the copied GIF as an animated image (2026-11-07)
-    manualPaste: true, present: () => /antigravity/i.test(vscode.env.appName) },
-  { id: "clipboard", label: "Clipboard only (Ctrl+V anywhere)" },
+  { id: "clipboard", label: "Any chat (copy, then Ctrl+V): Antigravity, Claude..." },
 ];
 
 class Picker {
@@ -136,10 +130,6 @@ class Picker {
             } catch {}
           }
           if (!opened) throw new Error("no command opened it");
-          if (this.chat.manualPaste) {
-            this.post({ type: "status", text: `GIF copied: press Ctrl+V in the ${this.chat.label} chat` });
-            return;
-          }
           await new Promise((r) => setTimeout(r, 400));
           await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
           this.post({ type: "status", text: `Pasted in the ${this.chat.label} chat (not there? press Ctrl+V)` });
@@ -147,7 +137,7 @@ class Picker {
           this.post({ type: "status", text: `Could not open the ${this.chat.label} chat: the GIF is copied, press Ctrl+V there` });
         }
       } else {
-        this.post({ type: "status", text: "GIF copied: press Ctrl+V in any chat" });
+        this.post({ type: "status", text: "GIF copied: press Ctrl+V in the chat" });
       }
     } catch (err) {
       this.post({ type: "status", text: `Could not send it: ${String(err.message || err)}` });
