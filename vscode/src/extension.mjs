@@ -14,8 +14,10 @@ import { MIN_LENGTH, waitAfterTyping } from "../../mod/typing.ts";
 // The chats a GIF can go to: the command that brings each one's message box into focus.
 // Found in the editors themselves (2026-11-07): the Codex extension, Antigravity's agent panel (Ctrl+L).
 const CHATS = [
-  { id: "codex", label: "Codex", focus: "chatgpt.openSidebar", present: () => !!vscode.extensions.getExtension("openai.chatgpt") },
-  { id: "antigravity", label: "Antigravity agent", focus: "antigravity.openChatView", present: () => /antigravity/i.test(vscode.env.appName) },
+  { id: "codex", label: "Codex", focus: ["chatgpt.openSidebar"], present: () => !!vscode.extensions.getExtension("openai.chatgpt") },
+  // Antigravity's built-in agent (its Gemini chat, Ctrl+L): which of its commands an extension may run is not
+  // documented, so the first that works wins
+  { id: "antigravity", label: "Antigravity agent (Gemini)", focus: ["antigravity.openChatView", "antigravity.toggleChatFocus", "antigravity.openAgent"], present: () => /antigravity/i.test(vscode.env.appName) },
   { id: "clipboard", label: "Clipboard only (Ctrl+V anywhere)" },
 ];
 
@@ -122,7 +124,15 @@ class Picker {
         this.post({ type: "status", text: "GIF path copied: paste it in the chat" });
       } else if (this.chat?.focus) {
         try {
-          await vscode.commands.executeCommand(this.chat.focus);
+          let opened = false;
+          for (const command of this.chat.focus) {
+            try {
+              await vscode.commands.executeCommand(command);
+              opened = true;
+              break;
+            } catch {}
+          }
+          if (!opened) throw new Error("no command opened it");
           await new Promise((r) => setTimeout(r, 400));
           await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
           this.post({ type: "status", text: `Pasted in the ${this.chat.label} chat (not there? press Ctrl+V)` });
