@@ -17,7 +17,7 @@ Claude Code plugin that draws GIFs in the chat and adds the `/gif` tray.
 |---|---|---|
 | Agent watches a GIF (file or URL) | yes | yes |
 | Agent searches and picks GIFs, following the etiquette rules | yes | yes |
-| GIF plays inline in the chat | yes (plugin) | no: you get the local file path |
+| GIF plays inline in the chat | yes (plugin) | Codex: yes, as a markdown image of the local file; others: if their chat draws local images, else a link |
 | `/gif` tray to send a GIF | yes (plugin) | no |
 
 The inline GIFs and the tray use Claude Code *mods* (plugin hooks), an early-access feature: Claude Code
