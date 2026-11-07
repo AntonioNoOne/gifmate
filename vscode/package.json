@@ -2,7 +2,7 @@
   "name": "gifmate-panel",
   "displayName": "gifmate: GIF panel",
   "description": "A GIPHY panel beside your coding agent: search as you type, click a GIF and it is attached to the Codex chat.",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "publisher": "antonio-arcodia",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/AntonioNoOne/gifmate" },

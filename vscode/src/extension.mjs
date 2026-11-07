@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { execFile } from "node:child_process";
 import { searchGiphy } from "../../src/giphy.mjs";
 import { loadBytes } from "../../src/gif.mjs";
 import { MIN_LENGTH, waitAfterTyping } from "../../mod/typing.ts";
@@ -82,18 +83,34 @@ class Picker {
       const name = `GIF ${result.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "").slice(0, 80).trim() || "GIF"}.gif`;
       const file = join(dir, name);
       await writeFile(file, await loadBytes(result.gif));
+      // Codex draws an attached file as a name chip only; a pasted image file it draws as an image.
+      // So the GIF also goes to the clipboard as a file, for Ctrl+V into the message.
+      const copied = await copyFile(file);
+      const paste = copied ? " · Ctrl+V nella chat per vederla nel messaggio" : "";
       const commands = await vscode.commands.getCommands(true);
       if (commands.includes(ATTACH)) {
         await vscode.commands.executeCommand(ATTACH, vscode.Uri.file(file));
-        this.post({ type: "status", text: `Allegata alla chat di Codex: scrivi il messaggio e invia` });
+        this.post({ type: "status", text: `Allegata alla chat di Codex${paste}` });
       } else {
-        await vscode.env.clipboard.writeText(file);
-        this.post({ type: "status", text: "Codex non trovato: percorso della GIF copiato, incollalo nella chat" });
+        if (!copied) await vscode.env.clipboard.writeText(file);
+        this.post({ type: "status", text: copied ? "GIF copiata: Ctrl+V nella chat" : "Percorso della GIF copiato, incollalo nella chat" });
       }
     } catch (err) {
       this.post({ type: "status", text: `Non sono riuscito ad allegarla: ${String(err.message || err)}` });
     }
   }
+}
+
+// Put a file (not its path) on the system clipboard. No window opens; false where it cannot.
+function copyFile(file) {
+  const run =
+    process.platform === "win32"
+      ? ["powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Set-Clipboard -LiteralPath $env:GIFMATE_FILE"]] // -Command glues extra args into the script
+      : process.platform === "darwin"
+        ? ["osascript", ["-e", "on run a", "-e", "set the clipboard to (POSIX file (item 1 of a))", "-e", "end run", file]]
+        : null;
+  if (!run) return Promise.resolve(false);
+  return new Promise((resolve) => execFile(run[0], run[1], { windowsHide: true, timeout: 5000, env: { ...process.env, GIFMATE_FILE: file } }, (err) => resolve(!err)));
 }
 
 function page(nonce) {
