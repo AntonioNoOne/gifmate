@@ -21,7 +21,7 @@ if (process.argv[2] === "init" || process.argv[2] === "setup") {
   process.exit(0);
 }
 
-const server = new McpServer({ name: "gifmate", version: "0.3.2" }, { instructions: GIF_RULES });
+const server = new McpServer({ name: "gifmate", version: "0.3.3" }, { instructions: GIF_RULES });
 
 // Sent GIFs and previews live in the temp folder for the chat to draw; a day later nobody needs them.
 const DIR = join(tmpdir(), "gifmate");
@@ -103,6 +103,24 @@ const later = (job, search) => (queue = queue.then(() => (search === searches ? 
 const clientName = () => server.server.getClientVersion()?.name ?? "unknown";
 // only Claude Code has the gifmate mod that draws GIFs from our lines: Claude Desktop ("claude-ai") gets markdown
 const isClaude = () => /^claude-code$/i.test(clientName());
+
+// Claude Code keeps every pasted image of a session in <temp>/claude/<project>/<session>/images/N.gif, and may hand
+// hooks a resized still instead of the GIF (seen 2026-11-07 with an 835 KB GIF): take the newest pasted in the last minute.
+async function recentPaste() {
+  const base = join(tmpdir(), "claude");
+  let best = null;
+  for (const project of await readdir(base).catch(() => [])) {
+    for (const session of await readdir(join(base, project)).catch(() => [])) {
+      const dir = join(base, project, session, "images");
+      for (const name of await readdir(dir).catch(() => [])) {
+        if (!/\.gif$/i.test(name)) continue;
+        const { mtimeMs } = await stat(join(dir, name));
+        if (Date.now() - mtimeMs < 60_000 && (!best || mtimeMs > best.mtimeMs)) best = { file: join(dir, name), mtimeMs };
+      }
+    }
+  }
+  return best ? loadBytes(best.file) : null;
+}
 
 // what the diary keeps of a GIF: its title, never where it came from
 const label = (title) => (title ? String(title).replace(/[\\/]|https?:\S*/g, " ").trim().slice(0, 80) || "untitled" : "untitled");
@@ -297,13 +315,15 @@ server.registerTool(
     inputSchema: {
       source: z.string().optional().describe("GIF URL or local path"),
       data: z.string().max(28_000_000).optional().describe("Or the GIF itself, base64 (a GIF pasted in the chat)"),
+      recent_paste: z.boolean().optional().describe("Or the GIF just pasted in Claude Code, from its session images"),
       title: z.string().optional().describe("The GIF's title"),
     },
   },
-  async ({ source, data, title }) => {
+  async ({ source, data, recent_paste, title }) => {
     try {
-      if (!source && !data) throw new Error("Give source or data.");
-      const { file } = await saveGif(data ? Buffer.from(data, "base64") : await loadBytes(source));
+      const bytes = data ? Buffer.from(data, "base64") : recent_paste ? await recentPaste() : source ? await loadBytes(source) : null;
+      if (!bytes) throw new Error("No GIF: give source, data or recent_paste.");
+      const { file } = await saveGif(bytes);
       await note({ kind: "picked", client: clientName(), gif: label(title) });
       return { content: [{ type: "text", text: `gifmate-sent: ${file}` }] };
     } catch (err) {

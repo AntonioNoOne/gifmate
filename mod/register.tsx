@@ -40,14 +40,15 @@ async function keepPasted($: any, id: string): Promise<GifmateAttached | null> {
     let offset: number | undefined
     do {
       const part = await $.prompt.media(offset === undefined ? { id } : { id, offset })
-      if (!part?.base64) return null
+      if (!part?.base64) break
       base64 += part.base64
       offset = part.next
     } while (offset !== undefined && base64.length < 28_000_000)
-    if (!base64.startsWith('R0lGOD')) return null // the engine may have turned it into a still PNG
     const tool = await toolNamed($, '__gif_pick')
     if (!tool) return null
-    const { text } = await $.tool.call({ tool, data: base64, title: 'pasted GIF' } as any)
+    // a big GIF reaches hooks as a resized still: then gifmate takes the original from the session's pasted images
+    const args = base64.startsWith('R0lGOD') ? { data: base64 } : { recent_paste: true }
+    const { text } = await $.tool.call({ tool, ...args, title: 'pasted GIF' } as any)
     const file = pathFrom(text, SENT)
     return file ? { title: 'pasted GIF (no title: look at it)', file } : null
   } catch {
