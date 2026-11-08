@@ -86,7 +86,7 @@ function steps() {
   if (found("codex")) list.push({ what: "Codex: the MCP server", cmds: [["codex", "mcp", "add", "gifmate", "--", ...mcp]] });
   if (found("gemini") && existsSync(join(root, "gemini-extension.json")))
     list.push({ what: "Gemini CLI: the extension", cmds: [["gemini", "extensions", "install", fromClone ? root : `https://github.com/${REPO}`, "--consent"]] });
-  const vsix = existsSync(join(root, "vscode")) ? readdirSync(join(root, "vscode")).filter((f) => f.endsWith(".vsix")).sort().at(-1) : null;
+  const vsix = existsSync(join(root, "vscode")) ? readdirSync(join(root, "vscode")).filter((f) => f.endsWith(".vsix")).sort((a, b) => a.localeCompare(b, "en", { numeric: true })).at(-1) : null;
   if (vsix) {
     for (const [editor, cli] of [["VS Code", "code"], ["Cursor", "cursor"], ["Antigravity", "antigravity-ide"]]) {
       if (found(cli)) list.push({ what: `${editor}: the GIF panel beside the agent's chat`, cmds: [[cli, "--install-extension", join(root, "vscode", vsix)]] });
