@@ -2,3 +2,5 @@ node_modules/
 .serena/
 vscode/dist/
 *.vsix
+docs/demo/assets/
+docs/demo/out/

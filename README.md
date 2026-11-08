@@ -2,6 +2,9 @@
 
 **Trade GIFs with your coding agent, like with a teammate, and let it get to know you.**
 
+<p align="center"><img src="docs/demo.gif" alt="The agent fixes a hard bug and celebrates with a GIF; you answer with your own GIF; the agent reads it as your reaction and notes it in its reaction diary" width="760"></p>
+<p align="center"><sub>A reconstructed chat that shows the loop (<a href="docs/demo/stage.html">source</a>); GIFs by GIPHY.</sub></p>
+
 - **You → agent**: pick a GIF from a GIPHY tray right in the chat. The agent reads it the way a teammate
   would, as a message ("let's go!", "this is fine"), not as a picture to describe.
 - **Agent → you**: at the moments that earn one (a bug hunted for days finally fixed, a long task done), the

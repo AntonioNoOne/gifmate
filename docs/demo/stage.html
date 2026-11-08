@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- gifmate README demo: a reconstructed, generic agent chat (no product's branding) that plays one loop by itself.
+     Recorded headless by record.py. GIFs from GIPHY, kept out of git (assets/). -->
+<html><head><meta charset="utf-8"><title>gifmate demo</title>
+<style>
+  :root { --bg:#16171b; --panel:#1e2026; --line:#2c2f37; --text:#e7e8ec; --dim:#8b8f9a; --me:#2b3a55; --accent:#7aa2ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 8px #4ade8099; }
+  header b { font-weight: 600; } header span { color: var(--dim); font-size: 13px; }
+  .chat { flex: 1; overflow: hidden; padding: 16px 22px; display: flex; flex-direction: column; gap: 12px; justify-content: flex-end; }
+  .msg { display: none; max-width: 78%; opacity: 0; transform: translateY(8px); transition: opacity .35s, transform .35s; }
+  .msg.shown { display: block; }
+  .msg.on { opacity: 1; transform: none; }
+  .me { align-self: flex-end; }
+  .me .bubble { background: var(--me); border-radius: 16px 16px 4px 16px; padding: 9px 14px; }
+  .agent { align-self: flex-start; }
+  .agent .who { font-size: 12px; color: var(--dim); margin: 0 0 4px 2px; }
+  .agent .bubble { background: var(--panel); border: 1px solid var(--line); border-radius: 16px 16px 16px 4px; padding: 9px 14px; }
+  .card { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); display: inline-block; }
+  .card img { display: block; height: 128px; }
+  .me .card { border-color: #3c5180; }
+  .tag { font-size: 11.5px; color: var(--dim); margin-top: 5px; }
+  .diary { display: none; align-self: center; font-size: 12.5px; color: #c9b8ff; background: #2a2340; border: 1px solid #45386b;
+    padding: 6px 12px; border-radius: 999px; opacity: 0; transition: opacity .4s; }
+  .diary.shown { display: block; }
+  .diary.on { opacity: 1; }
+  .composer { margin: 0 18px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+    padding: 11px 14px; color: var(--dim); font-size: 14px; display: flex; align-items: center; gap: 10px; min-height: 46px; }
+  .composer .chip { display: none; align-items: center; gap: 6px; background: #262a33; border: 1px solid var(--line);
+    border-radius: 8px; padding: 3px 8px; color: var(--text); font-size: 12.5px; }
+  .composer .chip img { height: 22px; border-radius: 4px; }
+  .composer.pasted .chip { display: inline-flex; }
+  .composer.pasted .hint { display: none; }
+  .typing { color: var(--dim); font-size: 13px; }
+  .fade { position: fixed; inset: 0; background: var(--bg); opacity: 0; pointer-events: none; transition: opacity .45s; }
+  .fade.on { opacity: 1; }
+</style></head>
+<body><div class="app">
+  <header><div class="dot"></div><b>agent chat</b><span>· gifmate on</span></header>
+  <div class="chat" id="chat">
+    <div class="msg me shown on" id="m0"><div class="bubble">uploads still drop on slow networks 😩 third day on this</div></div>
+    <div class="msg agent" id="m1"><div class="who">agent</div><div class="bubble">Found it: a race in the upload queue. Fixed, tests 48/48 green ✅</div></div>
+    <div class="msg agent" id="m2"><div class="card"><img src="assets/agent.gif" alt=""></div><div class="tag">gifmate · bug fixed · hard-won</div></div>
+    <div class="msg me" id="m3"><div class="card"><img src="assets/user.gif" alt=""></div></div>
+    <div class="msg agent" id="m4"><div class="who">agent</div><div class="bubble">Ha, that's the face 😄 Shipping it.</div></div>
+    <div class="diary" id="m5">📓 noted: “let's go!” after a hard-won fix · in tune next time</div>
+  </div>
+  <div class="composer" id="composer"><span class="hint">Message the agent…</span>
+    <span class="chip"><img src="assets/user.gif" alt="">image.gif</span></div>
+</div><div class="fade" id="fade"></div>
+<script>
+  // one loop, ~12.5 s: agent wins and celebrates -> you paste your reaction -> the agent reads it and gets in tune
+  const at = (ms, fn) => setTimeout(fn, ms);
+  // shown first (takes its place), then faded in on the next frame
+  const on = (id) => { const el = document.getElementById(id); el.classList.add('shown'); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on'))); };
+  at(700, () => on('m1'));
+  at(1900, () => on('m2'));
+  at(5200, () => document.getElementById('composer').classList.add('pasted'));
+  at(6300, () => { document.getElementById('composer').classList.remove('pasted'); on('m3'); });
+  at(8300, () => on('m4'));
+  at(9300, () => on('m5'));
+  at(12100, () => on('fade'));
+  window.DEMO_MS = 12600;
+</script></body></html>
