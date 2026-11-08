@@ -41,7 +41,7 @@ Prefer doing it by hand? See [Manual install](#manual-install).
 | Reaction diary, calibrate / quiet modes | ✓ | ✓ | ✓ |
 
 Claude Code's tray and inline GIFs use Claude Code *mods* (plugin hooks), an early-access feature it asks
-once to turn on; without them the tools still work. Tested on Windows; macOS is still to be tried.
+once to turn on; without them the tools still work. Tested on Windows (Claude Code, Codex, Antigravity, Gemini CLI); macOS and Linux are not tested yet, reports welcome.
 
 ## Use
 
@@ -50,6 +50,7 @@ once to turn on; without them the tools still work. Tested on Windows; macOS is 
 - `/gif` opens the tray with what is trending; type to search, results follow as you type.
 - **➤ Send** sends a GIF now. **📎 Attach** keeps it for your next message: write, press Enter, both go together.
 - `deploy done /gif lets go`: `/gif` anywhere in a sentence keeps your words and opens the tray on the rest.
+- **Paste a GIF** (Ctrl+V) and send: it plays in your message and reaches the agent as a GIF, not as a still frame.
 
 **In VS Code, Cursor or Antigravity**: the **GIF** icon in the activity bar opens the panel. Choose where
 GIFs go (**Send to**): Codex gets it pasted for you; for any other chat (Antigravity's agent, Claude...) the GIF
@@ -167,4 +168,4 @@ npm run build                         # dist/: the bundled server the plugins ru
 cd vscode && npm run package          # the GIF panel's .vsix
 ```
 
-Search results powered by GIPHY. MIT license.
+Search results powered by GIPHY. MIT license; the bundled dependencies (MCP SDK, zod, omggif, pngjs) are MIT too.
