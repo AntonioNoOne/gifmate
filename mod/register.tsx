@@ -5,6 +5,8 @@ import type { GifmateAttached, GifmatePick, GifmatePicker } from '../types'
 import { MIN_LENGTH, waitAfterTyping } from './typing'
 
 const SHOW_HEIGHT = 180
+// a collapsed message row is capped in height by the chat (a 180 px GIF scrolled inside it, 2026-11-08)
+const ROW_HEIGHT = 90
 
 // A GIF's SVG at its own proportions, never scaled up (blurry), at most `maxHeight` tall.
 function sizedGif(Svg: any, svg: string, maxHeight = SHOW_HEIGHT, alt = 'GIF') {
@@ -327,7 +329,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {words ? await next({ ...e, props: { ...e.props, text: words } }) : null}
-        {sizedGif(Svg, svg)}
+        {sizedGif(Svg, svg, e.props.isExpanded ? SHOW_HEIGHT : ROW_HEIGHT)}
       </Box>
     )
   })
